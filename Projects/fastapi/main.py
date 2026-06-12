@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="sk-d246c5a8745f4ca3a241ef2cc2fbe7d3", base_url="https://api.deepseek.com"
+    api_key="", base_url="https://api.deepseek.com"
 )
 
 
