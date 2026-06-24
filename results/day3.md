@@ -4,7 +4,6 @@
 
 Temperature 控制 GPT 输出的“随机性 / 发散程度”。它不改变模型能力，只改变“选择答案的策略”。
 
-
 ## Temperature 如何影响结果？
 
 Temperature = 0（确定性）
@@ -25,7 +24,6 @@ Temperature = 0.7（默认常用）
 最常用
 ChatGPT 默认体验
 
-
 Temperature = 1.2（高随机）
 更敢选低概率 Token
 
@@ -37,12 +35,10 @@ Temperature = 1.2（高随机）
 
 ## 本质数学理解（关键）
 
-
 模型原始输出：logits
 转换概率：softmax(logits / T)， T = Temperature
 
 T越小。整体概率越大，越确定
-
 
 # Top-p（nucleus sampling）
 
@@ -58,15 +54,14 @@ C 0.2
 D 0.05
 E 0.05
 
-op-p = 0.8：只保留 A + B + C, D/E 直接丢掉。
+Top-p = 0.8：只保留 A + B + C, D/E 直接丢掉。
 
 Temperature vs Top-p
 
-| 参数          | 控制什么     | 作用     |
-| ----------- | -------- | ------ |
-| Temperature | 分布“平滑程度” | 控制随机性  |
-| Top-p       | 候选范围     | 控制搜索空间 |
-
+| 参数        | 控制什么       | 作用         |
+| ----------- | -------------- | ------------ |
+| Temperature | 分布“平滑程度” | 控制随机性   |
+| Top-p       | 候选范围       | 控制搜索空间 |
 
 ## 实战建议
 
@@ -95,12 +90,11 @@ top_p = 0.9
 
 Router 模型（判断任务类型）
 if tool_call:
-    temperature = 0
+temperature = 0
 elif reasoning:
-    temperature = 0.3
+temperature = 0.3
 elif writing:
-    temperature = 0.8
-
+temperature = 0.8
 
 ## “模型参数”到底指什么？
 
@@ -112,21 +106,18 @@ elif writing:
 
 2）推理参数（Inference Parameters）
 
-
-| 参数                | 作用    |
-| ----------------- | ----- |
-| temperature       | 随机性   |
-| top_p             | 采样范围  |
-| max_tokens        | 输出长度  |
-| frequency_penalty | 重复惩罚  |
+| 参数              | 作用       |
+| ----------------- | ---------- |
+| temperature       | 随机性     |
+| top_p             | 采样范围   |
+| max_tokens        | 输出长度   |
+| frequency_penalty | 重复惩罚   |
 | presence_penalty  | 新话题倾向 |
-
 
 max_tokens
 
 控制输出长度：
 最多生成多少 Token
-
 
 frequency_penalty
 
@@ -137,7 +128,6 @@ frequency_penalty
 写文章
 长文本
 
-
 presence_penalty
 
 鼓励新内容：
@@ -147,18 +137,17 @@ presence_penalty
 brainstorming
 创意生成
 
-
-| 参数                | 关注什么   | 作用     |
-| ----------------- | ------ | ------ |
+| 参数              | 关注什么     | 作用         |
+| ----------------- | ------------ | ------------ |
 | frequency_penalty | 出现了多少次 | 减少重复用词 |
-| presence_penalty  | 是否出现过  | 鼓励新主题  |
+| presence_penalty  | 是否出现过   | 鼓励新主题   |
 
 常见在agent中,追求稳定
 
 {
-  "temperature": 0.2,
-  "frequency_penalty": 0,
-  "presence_penalty": 0
+"temperature": 0.2,
+"frequency_penalty": 0,
+"presence_penalty": 0
 }
 
 ## 面试级回答
