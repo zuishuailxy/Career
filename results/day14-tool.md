@@ -84,7 +84,7 @@ tool_calls = response_message.tool_calls
 ```python
 # 检查模型是否想要调用函数
 if tool_calls:
-    # 我们假设只处理第一个 tool call
+    # 我们假设只处理第一个 tools call
     tool_call = tool_calls[0]
     function_name = tool_call.function.name
     function_args = json.loads(tool_call.function.arguments)  # 解析参数 JSON
@@ -112,7 +112,7 @@ if tool_calls:
         {"role": "user", "content": user_message},
         response_message,  # 模型的第一次响应（包含tool_calls）
         {
-            "role": "tool",
+            "role": "tools",
             "tool_call_id": tool_call.id,  # 关联对应的 tool_call
             "content": function_response,  # 函数执行的结果
         },
@@ -353,12 +353,12 @@ if tool_calls:
     # 构造新的消息列表，包含：
     # - 原始用户消息
     # - 模型的工具调用请求（包含 tool_calls）
-    # - 工具执行结果（使用专用 role="tool"）
+    # - 工具执行结果（使用专用 role="tools"）
     messages = [
         {"role": "user", "content": user_message},
         response_message,  # 这里包含 tool_calls
         {
-            "role": "tool",
+            "role": "tools",
             "tool_call_id": tool_call.id,  # 必须与对应的 tool_call id 匹配
             "content": function_response,
         }
@@ -455,7 +455,7 @@ def chat_with_stock(user_input):
             result = "未知函数"
         # 添加工具执行结果
         messages.append({
-            "role": "tool",
+            "role": "tools",
             "tool_call_id": tool_call.id,
             "content": result,
         })

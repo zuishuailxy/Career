@@ -73,6 +73,7 @@ async def chat(query):
         messages=history,
         tools=tools,
         tool_choice="auto",
+
     )
 
     print("before compress", len(history))
@@ -111,7 +112,7 @@ async def chat(query):
 
         history.append(
             {
-                "role": "tool",
+                "role": "tools",
                 "tool_call_id": tool_call.id,
                 "content": result,
             }

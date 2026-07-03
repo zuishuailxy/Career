@@ -203,7 +203,7 @@ Chat Completion 本质上是“带上下文的下一轮 Token 预测”。
 
 ```json
 {
-  "role": "tool",
+  "role": "tools",
   "content": "22°C Sunny"
 }
 ```

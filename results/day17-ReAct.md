@@ -59,7 +59,7 @@ while step < max_steps:
     # 1. 调用大模型（带 tools 参数）
     response = client.chat.completions.create(
         model="gpt-4o",
-        messages=messages,  # 包含 system, user, 以及历史的 tool 结果
+        messages=messages,  # 包含 system, user, 以及历史的 tools 结果
         tools=tools         # 你定义的工具列表
     )
 
@@ -72,7 +72,7 @@ while step < max_steps:
             result = execute_tool(tool_call)  # 你的 Python 函数
             # 将结果以 observation 形式加入消息历史
             messages.append({
-                "role": "tool",
+                "role": "tools",
                 "tool_call_id": tool_call.id,
                 "content": result  # === 这是 ReAct 的 Observation 阶段 ===
             })
@@ -155,7 +155,7 @@ assistant = client.beta.assistants.create(
     """,  # <--- 这就是 Agent 的描述/系统提示词
     model="gpt-4o",
     tools=[{"type": "retrieval"}]   # 给助理配置上你的业务知识
-    ile_ids=[file.id]
+    file_ids=[file.id]
 
 )
 
