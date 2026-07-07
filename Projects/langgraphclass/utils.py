@@ -1,11 +1,14 @@
 from langchain_deepseek import ChatDeepSeek
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # from langchain_huggingface import HuggingFaceEmbeddings
 
 
-def create_llm(temperature=0.7):
+def create_llm(model="deepseek-chat", temperature=0.7):
     llm = ChatDeepSeek(
-        model="deepseek-chat",
+        model=model,
         temperature=temperature,  # 控制随机性，范围 0-1[reference:10]
         max_tokens=None,  # 最大生成 token 数[reference:11]
         timeout=None,  # 请求超时时间[reference:12]
