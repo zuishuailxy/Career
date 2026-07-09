@@ -1,0 +1,1 @@
+uv pip install -e . 2>&1 && uv run main.py 2>&1

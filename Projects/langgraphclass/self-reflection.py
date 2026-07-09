@@ -4,6 +4,7 @@ import os
 import logging
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from pydantic import BaseModel, Field
 from typing import Annotated  # 用于类型注解
 from langgraph.graph import END, StateGraph, START  # 导入状态图的相关常量和类
 from langgraph.graph.message import add_messages  # 用于在状态中处理消息
@@ -43,8 +44,22 @@ writer_prompt = ChatPromptTemplate.from_messages(
 )
 
 
-write_model = create_llm(model="deepseek-chat", temperature=1.2)
+write_model = create_llm(model="deepseek-v4-pro", temperature=1.2)
 writer_agent = writer_prompt | write_model
+
+
+# 反思结果的结构化输出
+class ReflectionResult(BaseModel):
+    """语文老师对文章的批改结果"""
+
+    total_score: float = Field(ge=0, le=10, description="总分，满分 10 分")
+    issues: list[str] = Field(
+        description="仍需改进的具体问题；若无明显问题则返回空列表"
+    )
+    suggestions: list[str] = Field(
+        description="2-3 条具体可操作的修改方向；若已合格则仅含「文章已合格，无需修改」"
+    )
+    passed: bool = Field(description="文章是否达到合格标准（8 分及以上）")
 
 
 # 创建一个自我反思的 agent
@@ -52,25 +67,35 @@ reflection_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "你是一名严格的语文老师，正在批改学生提交的文章。请按以下格式给出评审意见：\n\n"
-            "## 评分（满分 10 分，8 分以上为合格）\n"
+            "你是一名严格的语文老师，正在批改学生提交的文章。\n\n"
+            "评分维度（满分 10 分，8 分以上为合格）：\n"
             "- 内容切题（3分）：是否紧扣主题，不跑题\n"
             "- 结构逻辑（3分）：开篇→主体→结尾是否完整，论证是否清晰\n"
             "- 语言表达（2分）：是否生动流畅，善用修辞\n"
-            "- 字数控制（2分）：是否接近 400 字（380-420 字满分）\n"
-            "- **总分：X/10**\n\n"
-            "## 具体问题\n"
-            '逐条列出仍需改进的地方，以 - 开头。如果没有问题，写"无明显问题"。\n\n'
-            "## 修改建议\n"
-            '给出 2-3 条具体可操作的修改方向。如果文章已达到合格标准（8分），写"文章已合格，无需修改"。\n\n'
-            "评分标准：只有文章在各方面都基本达标时才给 8 分以上，不要轻易给高分。",
+            "- 字数控制（2分）：是否接近 400 字（380-420 字满分）\n\n"
+            "评分标准：只有文章在各方面都基本达标时才给 8 分以上，不要轻易给高分。\n"
+            "将 issues 逐条列出仍需改进之处；suggestions 给出 2-3 条可操作的修改方向。\n"
+            "若已合格，issues 可为空，suggestions 仅写「文章已合格，无需修改」，passed 设为 true。",
         ),
         MessagesPlaceholder(variable_name="messages"),
     ]
 )
 
-reflection_model = create_llm(model="deepseek-v4-pro", temperature=0.2)
-reflection_agent = reflection_prompt | reflection_model
+reflection_model = create_llm(model="deepseek-chat", temperature=0.2)
+reflection_agent = reflection_prompt | reflection_model.with_structured_output(
+    ReflectionResult
+)
+
+
+def _extract_latest_draft(messages: list) -> str:
+    """从消息列表中提取最新一版 writer 生成的文章"""
+    ai_messages = [
+        msg for msg in messages if isinstance(msg, AIMessage) and msg.content
+    ]
+    if not ai_messages:
+        return ""
+    article = max(ai_messages, key=lambda m: len(m.content)).content
+    return re.split(r"\n---", article)[0]
 
 
 # 定义状态类，使用TypedDict以保存消息
@@ -78,11 +103,31 @@ class State(TypedDict):
     messages: Annotated[list, add_messages]
     round: int
     score: float  # 最新一轮的评分
+    best_draft: str  # 历史最高分对应的文章
+    best_score: float
+    best_round: int
 
 
 # 异步生成节点函数：生成内容（如作文）
 async def generation_node(state: State) -> State:
     return {"messages": [await writer_agent.ainvoke(state["messages"])]}
+
+
+def _format_reflection_feedback(result: ReflectionResult) -> str:
+    """将结构化反思结果格式化为传给 writer 的文本"""
+    issues_block = ""
+    if result.issues:
+        issues_block = "具体问题：\n" + "\n".join(
+            f"- {issue}" for issue in result.issues
+        )
+        issues_block += "\n\n"
+
+    suggestions_block = "\n".join(f"- {s}" for s in result.suggestions)
+    return (
+        f"【老师评分：{result.total_score}/10】\n"
+        f"{issues_block}"
+        f"修改意见如下，请对照修改：\n{suggestions_block}"
+    )
 
 
 # 异步反思节点函数：对生成的内容进行反思和反馈
@@ -91,55 +136,58 @@ async def reflection_node(state: State) -> State:
     translated = [state["messages"][0]] + [
         cls_map[msg.type](content=msg.content) for msg in state["messages"][1:]
     ]
-    res = await reflection_agent.ainvoke(translated)
-    feedback = res.content
+    result: ReflectionResult = await reflection_agent.ainvoke(translated)
 
-    # 提取评分和修改建议，分开存储
-    score = "?"
+    parsed_score = result.total_score
+    current_round = state.get("round", 0) + 1
+    draft = _extract_latest_draft(state["messages"])
 
-    score_match = re.search(r"总分[：:]\s*(\d+(?:\.\d+)?)\s*/?\s*10", feedback)
-    if score_match:
-        score = score_match.group(1)
+    best_score = state.get("best_score", 0)
+    best_draft = state.get("best_draft", "")
+    best_round = state.get("best_round", 0)
+    if draft and (parsed_score >= best_score or not best_draft):
+        best_draft = draft
+        best_score = parsed_score
+        best_round = current_round
 
-    # 只把"修改建议"部分传给 writer，避免评分表干扰
-    suggestions = (
-        feedback.split("## 修改建议")[-1] if "## 修改建议" in feedback else feedback
+    logger.info(
+        "第 %d 轮反思，评分: %.1f/10，合格: %s",
+        current_round,
+        result.total_score,
+        result.passed,
     )
-
-    logger.info("第 %d 轮反思，评分: %s/10", state.get("round", 0) + 1, score)
     return {
-        "messages": [
-            HumanMessage(
-                content=f"【老师评分：{score}/10】\n修改意见如下，请对照修改：\n{suggestions}"
-            )
-        ],
-        "round": state.get("round", 0) + 1,
-        "score": float(score) if score != "?" else 0,
+        "messages": [HumanMessage(content=_format_reflection_feedback(result))],
+        "round": current_round,
+        "score": parsed_score,
+        "best_draft": best_draft,
+        "best_score": best_score,
+        "best_round": best_round,
     }
 
 
-# 保存节点：评分达标后将文章保存为 txt
+# 保存节点：评分达标或达到最大轮次后将文章保存为 txt
 def save_node(state: State) -> State:
-    """提取最新一版 writer 生成的文章，保存为 .txt 文件"""
-    # 找到真正的文章（取内容最长的 AIMessage，避免取到客套话）
-    article = ""
-    ai_messages = [
-        msg for msg in state["messages"] if isinstance(msg, AIMessage) and msg.content
-    ]
-    if ai_messages:
-        article = max(ai_messages, key=lambda m: len(m.content)).content
+    """达标时保存最新稿；未达标但达最大轮次时保存历史最高分版本"""
+    passed = state.get("score", 0) >= PASS_SCORE
 
-    # 清洗：去掉"---"后面的修改说明
-    article = re.split(r"\n---", article)[0]
+    if passed:
+        article = _extract_latest_draft(state["messages"])
+        save_round = state.get("round", 0)
+        save_score = state.get("score", 0)
+        status = "文章已达标"
+    else:
+        article = state.get("best_draft") or _extract_latest_draft(state["messages"])
+        save_round = state.get("best_round", state.get("round", 0))
+        save_score = state.get("best_score", 0)
+        status = f"未达 {PASS_SCORE} 分标准，已保存历史最佳版本（第 {save_round} 轮）"
 
-    filename = (
-        f"article_round{state.get('round', 0)}_score{state.get('score', 0):.0f}.txt"
-    )
+    filename = f"article_round{save_round}_score{save_score:.0f}.txt"
     with open(filename, "w", encoding="utf-8") as f:
         f.write(article)
 
-    logger.info("文章已保存为 %s", filename)
-    return {"messages": [AIMessage(content=f"✅ 文章已达标并保存为 {filename}")]}
+    logger.info("%s，已保存为 %s", status, filename)
+    return {"messages": [AIMessage(content=f"✅ {status}，保存为 {filename}")]}
 
 
 MAX_ROUND = 3
@@ -151,8 +199,12 @@ def should_continue(state: State):
         logger.info("评分 %.1f 达标（≥%d），保存并结束", state["score"], PASS_SCORE)
         return "save"
     if state.get("round", 0) >= MAX_ROUND:
-        logger.info("达到最大轮次 %d，结束", MAX_ROUND)
-        return END
+        logger.info(
+            "达到最大轮次 %d（最佳 %.1f 分），保存历史最佳版本",
+            MAX_ROUND,
+            state.get("best_score", 0),
+        )
+        return "save"
     return "reflect"
 
 
@@ -238,10 +290,13 @@ def run_self_reflection():
 
     inputs = {
         "messages": [
-            HumanMessage(content="参考红楼梦的说话风格，写一篇奉劝讽刺中国足球的文章")
+            HumanMessage(content="参考斗破苍穹的说话风格，写一篇奉劝讽刺中国足球的文章")
         ],
         "round": 0,
         "score": 0.0,
+        "best_draft": "",
+        "best_score": 0.0,
+        "best_round": 0,
     }
     config = {"configurable": {"thread_id": "1"}}
 

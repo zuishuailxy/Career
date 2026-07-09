@@ -1,0 +1,182 @@
+"""DeepSeek Provider — 对应 internal/provider/openai.go
+
+基于 OpenAI 兼容接口的 DeepSeek 实现。
+"""
+
+from collections.abc import AsyncIterator
+import json
+import logging
+import os
+from typing import Any
+
+from openai import AsyncOpenAI
+from langsmith.wrappers import wrap_openai
+
+from tiny_claw.provider.base import LLMProvider
+from tiny_claw.schema import Message, Role, ToolCall, ToolDefinition
+
+logger = logging.getLogger("tiny-claw.provider.deepseek")
+
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+DEFAULT_MODEL = "deepseek-v4-pro"
+
+
+def _to_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:
+    """将内部 Message 翻译为 OpenAI 格式"""
+    openai_msgs: list[dict[str, Any]] = []
+
+    for msg in messages:
+        if msg.role == Role.SYSTEM:
+            openai_msgs.append({"role": "system", "content": msg.content})
+
+        elif msg.role == Role.USER:
+            if msg.tool_call_id:
+                openai_msgs.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.tool_call_id,
+                        "content": msg.content,
+                    }
+                )
+            else:
+                openai_msgs.append({"role": "user", "content": msg.content})
+
+        elif msg.role == Role.ASSISTANT:
+            entry: dict[str, Any] = {"role": "assistant"}
+            if msg.content:
+                entry["content"] = msg.content
+            if msg.tool_calls:
+                entry["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+                        },
+                    }
+                    for tc in msg.tool_calls
+                ]
+            openai_msgs.append(entry)
+
+    return openai_msgs
+
+
+def _to_openai_tools(
+    tools: list[ToolDefinition] | None,
+) -> list[dict[str, Any]] | None:
+    """将内部 ToolDefinition 翻译为 OpenAI function tools 格式"""
+    if not tools:
+        return None
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t.name,
+                "description": t.description,
+                "parameters": (
+                    t.input_schema
+                    if t.input_schema
+                    else {
+                        "type": "object",
+                        "properties": {},
+                    }
+                ),
+            },
+        }
+        for t in tools
+    ]
+
+
+def _from_openai_response(response: Any) -> Message:
+    """将 OpenAI response 反向翻译为内部 Message"""
+    choice = response.choices[0].message
+
+    result = Message(role=Role.ASSISTANT, content=choice.content or "")
+
+    if choice.tool_calls:
+        for tc in choice.tool_calls:
+            try:
+                args = json.loads(tc.function.arguments)
+            except json.JSONDecodeError:
+                args = {}
+            result.tool_calls.append(
+                ToolCall(
+                    id=tc.id,
+                    name=tc.function.name,
+                    arguments=args,
+                )
+            )
+
+    return result
+
+
+class DeepSeekProvider(LLMProvider):
+    """DeepSeek Provider — 基于 OpenAI 兼容接口"""
+
+    def __init__(self, model: str = DEFAULT_MODEL):
+        api_key = os.getenv("DEEPSEEK_API_KEY", "")
+        if not api_key:
+            raise ValueError("请设置 DEEPSEEK_API_KEY 环境变量")
+
+        self.client = wrap_openai(
+            AsyncOpenAI(
+                api_key=api_key,
+                base_url=DEEPSEEK_BASE_URL,
+            )
+        )
+        self.model = model
+        logger.info("DeepSeek provider 初始化完成，模型: %s", model)
+
+    async def generate(
+        self,
+        messages: list[Message],
+        available_tools: list[ToolDefinition] | None = None,
+    ) -> Message:
+        """发起推理请求 — 对应 Go 的 Generate()"""
+        openai_msgs = _to_openai_messages(messages)
+        openai_tools = _to_openai_tools(available_tools)
+
+        params: dict[str, Any] = {
+            "model": self.model,
+            "messages": openai_msgs,
+        }
+        # 当 available_tools 为 None 时，不传 tools 字段（实现慢思考）
+        if openai_tools is not None:
+            params["tools"] = openai_tools
+
+        try:
+            response = await self.client.chat.completions.create(**params)
+        except Exception as e:
+            raise RuntimeError(f"DeepSeek API 请求失败: {e}") from e
+
+        if not response.choices:
+            raise RuntimeError("DeepSeek API 返回了空的 Choices")
+
+        return _from_openai_response(response)
+
+    async def generate_stream(
+        self,
+        messages: list[Message],
+        available_tools: list[ToolDefinition] | None = None,
+    ) -> AsyncIterator[str]:
+        """流式推理 — 逐 token 产出文本"""
+        openai_msgs = _to_openai_messages(messages)
+        openai_tools = _to_openai_tools(available_tools)
+
+        params: dict[str, Any] = {
+            "model": self.model,
+            "messages": openai_msgs,
+            "stream": True,
+        }
+        if openai_tools is not None:
+            params["tools"] = openai_tools
+
+        try:
+            stream = await self.client.chat.completions.create(**params)
+        except Exception as e:
+            raise RuntimeError(f"DeepSeek 流式请求失败: {e}") from e
+
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content

@@ -1,3 +1,7 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/Projects/langgraphclass/.venv/bin/python3"
+  "python.defaultInterpreterPath": "${workspaceFolder}/Projects/python-tiny-claw/.venv/bin/python3",
+  "python-envs.defaultEnvManager": "ms-python.python:venv",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/Projects/python-tiny-claw/src"
+  ]
 }
