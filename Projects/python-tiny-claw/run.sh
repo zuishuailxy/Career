@@ -1,1 +1,1 @@
-uv pip install -e . 2>&1 && uv run main.py 2>&1
+uv pip install -e . 2>&1 && uv run main.py -p "帮我搭建一个 FastAPI Web 服务"  2>&1

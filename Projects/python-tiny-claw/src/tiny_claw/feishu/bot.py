@@ -12,6 +12,9 @@ from lark_oapi.ws import Client as WsClient
 from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
 from tiny_claw.engine import AgentEngine, Reporter
+from tiny_claw.engine.session import Session
+from tiny_claw.schema import Message, Role
+from tiny_claw.tools.builtin import ReadFileTool, WriteFileTool, BashTool, EditFileTool, SkillTool
 
 logger = logging.getLogger("tiny-claw.feishu")
 
@@ -99,10 +102,22 @@ class FeishuBot:
 
     async def _handle_agent(self, chat_id: str, prompt: str) -> None:
         reporter = FeishuReporter(self._client, chat_id)
+
+        # 按 Session 工作区注册工具
+        work_dir = os.getcwd()
+        self._engine.registry.register(ReadFileTool(work_dir))
+        self._engine.registry.register(WriteFileTool(work_dir))
+        self._engine.registry.register(BashTool(work_dir))
+        self._engine.registry.register(EditFileTool(work_dir))
+        self._engine.registry.register(SkillTool(work_dir))
+
+        session = Session(chat_id, work_dir)
+        await session.append(Message(role=Role.USER, content=prompt))
+
         old = self._engine.reporter
         self._engine.reporter = reporter
         try:
-            await self._engine.run(prompt)
+            await self._engine.run(session)
         except Exception as e:
             await reporter._send(f"❌ Agent 运行崩溃: {e}")
         finally:
