@@ -10,6 +10,7 @@ from typing import Any
 
 from tiny_claw.tools.base import BaseTool
 from tiny_claw.schema import ToolDefinition
+from tiny_claw.context.recovery import ErrorCode, format_error
 
 logger = logging.getLogger("tiny-claw.tools.read_file")
 
@@ -45,27 +46,30 @@ class ReadFileTool(BaseTool):
         # 1. 参数校验
         rel_path = arguments.get("path", "")
         if not rel_path:
-            return "Error: 缺少 path 参数"
+            return format_error(ErrorCode.MISSING_PARAM, "缺少 path 参数")
 
         # 2. 拼接并解析绝对路径，防路径穿越 (../../etc/passwd)
         full_path = (self._work_dir / rel_path).resolve()
 
         if not str(full_path).startswith(str(self._work_dir)):
-            return f"Error: 路径穿越被拦截。'{rel_path}' 超出了工作区范围。"
+            return format_error(
+                ErrorCode.PATH_TRAVERSAL,
+                f"'{rel_path}' 超出了工作区范围",
+            )
 
         # 3. 读取文件
         try:
             content = full_path.read_text(encoding="utf-8")
         except FileNotFoundError:
-            return f"Error: 文件不存在: {rel_path}"
+            return format_error(ErrorCode.FILE_NOT_FOUND, f"文件不存在: {rel_path}")
         except PermissionError:
-            return f"Error: 无权限读取: {rel_path}"
+            return format_error(ErrorCode.PERMISSION_DENIED, f"无权限读取: {rel_path}")
         except IsADirectoryError:
-            return f"Error: '{rel_path}' 是一个目录，不是文件。"
+            return format_error(ErrorCode.IS_DIRECTORY, f"'{rel_path}' 是一个目录，不是文件")
         except UnicodeDecodeError:
-            return f"Error: '{rel_path}' 不是文本文件，无法读取。"
+            return format_error(ErrorCode.NOT_TEXT_FILE, f"'{rel_path}' 不是文本文件，无法读取")
         except Exception as e:
-            return f"Error: 读取文件失败: {e}"
+            return format_error(ErrorCode.FILE_READ_FAILED, f"读取文件失败: {e}")
 
         # 4. 长度截断保护
         if len(content.encode("utf-8")) > MAX_BYTES:

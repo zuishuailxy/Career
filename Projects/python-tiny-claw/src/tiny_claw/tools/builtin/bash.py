@@ -10,6 +10,7 @@ from typing import Any
 
 from tiny_claw.tools.base import BaseTool
 from tiny_claw.schema import ToolDefinition
+from tiny_claw.context.recovery import ErrorCode, format_error
 
 logger = logging.getLogger("tiny-claw.tools.bash")
 
@@ -54,7 +55,7 @@ class BashTool(BaseTool):
         command = arguments.get("command", "")
         background = arguments.get("background", False)
         if not command:
-            return "Error: 缺少 command 参数"
+            return format_error(ErrorCode.MISSING_PARAM, "缺少 command 参数")
 
         try:
             # 通过 bash -c 执行，支持管道、&& 等 Shell 语法
@@ -69,15 +70,20 @@ class BashTool(BaseTool):
 
             # 后台模式：不等待，直接返回 PID
             if background:
-                return f"后台任务已启动 (PID: {proc.pid})。使用 `kill {proc.pid}` 可终止。"
+                return (
+                    f"后台任务已启动 (PID: {proc.pid})。使用 `kill {proc.pid}` 可终止。"
+                )
 
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT)
         except asyncio.TimeoutError:
-            return f"[警告: 命令执行超时({TIMEOUT}s)，已被系统强制终止。如果是启动常驻服务，请尝试将其转入后台。]"
+            return format_error(
+                ErrorCode.BASH_TIMEOUT,
+                f"命令执行超时({TIMEOUT}s)，已被系统强制终止。如果是启动常驻服务，请尝试将其转入后台",
+            )
         except FileNotFoundError:
-            return "Error: bash 不可用"
+            return format_error(ErrorCode.BASH_COMMAND_NOT_FOUND, "bash 不可用")
         except Exception as e:
-            return f"执行报错: {e}"
+            return format_error(ErrorCode.UNKNOWN, f"执行报错: {e}")
 
         output = stdout.decode("utf-8", errors="replace")
         if stderr:
@@ -85,11 +91,8 @@ class BashTool(BaseTool):
 
         # 自愈机制：bash 报错不抛异常，把错误原样返回让模型自己分析
         if proc.returncode != 0:
-            return (
-                f"执行报错 (exit code {proc.returncode}):\n{output}"
-                if output
-                else f"执行报错 (exit code {proc.returncode})"
-            )
+            detail = output.strip() if output else f"exit code {proc.returncode}"
+            return format_error(ErrorCode.BASH_NONZERO_EXIT, detail)
 
         if not output:
             return "命令执行成功，无终端输出。"

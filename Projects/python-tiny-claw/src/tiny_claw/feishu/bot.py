@@ -14,7 +14,13 @@ from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 from tiny_claw.engine import AgentEngine, Reporter
 from tiny_claw.engine.session import Session
 from tiny_claw.schema import Message, Role
-from tiny_claw.tools.builtin import ReadFileTool, WriteFileTool, BashTool, EditFileTool, SkillTool
+from tiny_claw.tools.builtin import (
+    ReadFileTool,
+    WriteFileTool,
+    BashTool,
+    EditFileTool,
+    SkillTool,
+)
 
 logger = logging.getLogger("tiny-claw.feishu")
 
@@ -44,6 +50,10 @@ class FeishuReporter(Reporter):
     async def on_message(self, content: str) -> None:
         await self._send(content)
 
+    async def send_msg(self, text: str) -> None:
+        """公开消息发送接口（供审批等外部模块使用）"""
+        await self._send(text)
+
     async def _send(self, text: str) -> None:
         content_str = json.dumps({"text": text}, ensure_ascii=False)
         req = (
@@ -67,7 +77,7 @@ class FeishuReporter(Reporter):
 class FeishuBot:
     """飞书机器人 — 长连接模式"""
 
-    def __init__(self, engine: AgentEngine):
+    def __init__(self, engine: AgentEngine, session: Session):
         app_id = os.getenv("FEISHU_APP_ID", "")
         app_secret = os.getenv("FEISHU_APP_SECRET", "")
         if not app_id or not app_secret:
@@ -76,6 +86,8 @@ class FeishuBot:
         self._app_secret = app_secret
         self._client = Client.builder().app_id(app_id).app_secret(app_secret).build()
         self._engine = engine
+        self._sess = session  # 绑定持久化 Session，跨消息复用上下文
+        self._reporter: FeishuReporter | None = None
         logger.info("飞书机器人初始化完成（长连接模式）")
 
     def start(self) -> None:
@@ -87,6 +99,12 @@ class FeishuBot:
                 content = json.loads(inner.message.content).get("text", "")
                 chat_id = inner.message.chat_id
                 logger.info("收到会话 %s 消息: %s", chat_id, content[:100])
+
+                # 检查是否为审批回复
+                if content.startswith("approve ") or content.startswith("reject "):
+                    self._handle_approval(chat_id, content)
+                    return
+
                 asyncio.create_task(self._handle_agent(chat_id, content))
             except Exception as e:
                 logger.error("消息处理失败: %s", e)
@@ -101,9 +119,10 @@ class FeishuBot:
         WsClient(self._app_id, self._app_secret, event_handler=handler).start()
 
     async def _handle_agent(self, chat_id: str, prompt: str) -> None:
-        reporter = FeishuReporter(self._client, chat_id)
+        # 绑定当前会话的 Reporter
+        self._reporter = FeishuReporter(self._client, chat_id)
 
-        # 按 Session 工作区注册工具
+        # 工具按工作区注册（首次）
         work_dir = os.getcwd()
         self._engine.registry.register(ReadFileTool(work_dir))
         self._engine.registry.register(WriteFileTool(work_dir))
@@ -111,14 +130,47 @@ class FeishuBot:
         self._engine.registry.register(EditFileTool(work_dir))
         self._engine.registry.register(SkillTool(work_dir))
 
-        session = Session(chat_id, work_dir)
-        await session.append(Message(role=Role.USER, content=prompt))
+        # 将用户 prompt 压入持久化 Session，复用跨消息上下文
+        await self._sess.append(Message(role=Role.USER, content=prompt))
 
         old = self._engine.reporter
-        self._engine.reporter = reporter
+        self._engine.reporter = self._reporter
         try:
-            await self._engine.run(session)
+            await self._engine.run(self._sess)
         except Exception as e:
-            await reporter._send(f"❌ Agent 运行崩溃: {e}")
+            await self._reporter.send_msg(f"❌ Agent 运行崩溃: {e}")
         finally:
             self._engine.reporter = old
+
+    @property
+    def reporter(self) -> FeishuReporter | None:
+        """返回当前绑定的 Reporter（供审批中间件等外部模块访问）"""
+        return self._reporter
+
+    def _handle_approval(self, chat_id: str, content: str) -> None:
+        """处理飞书审批回复（approve/reject <task_id>）"""
+        from tiny_claw.feishu.approve import global_approval_mgr
+
+        parts = content.strip().split()
+        if len(parts) != 2:
+            logger.warning("审批命令格式错误: %s", content)
+            return
+
+        action, task_id = parts[0].lower(), parts[1]
+        allowed = action == "approve"
+
+        ok = global_approval_mgr.resolve_approval(
+            task_id,
+            allowed=allowed,
+            reason=f"用户从飞书 {'批准' if allowed else '拒绝'}",
+        )
+        if ok:
+            # 异步发送确认消息
+            reporter = FeishuReporter(self._client, chat_id)
+            asyncio.create_task(
+                reporter.send_msg(
+                    f"{'✅ 已批准' if allowed else '❌ 已拒绝'}任务 `{task_id}`"
+                )
+            )
+        else:
+            logger.info("审批 TaskID %s 未找到或已完成", task_id)

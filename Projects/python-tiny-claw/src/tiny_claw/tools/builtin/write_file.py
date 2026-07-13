@@ -8,6 +8,7 @@ from typing import Any
 
 from tiny_claw.tools.base import BaseTool
 from tiny_claw.schema import ToolDefinition
+from tiny_claw.context.recovery import ErrorCode, format_error
 
 
 class WriteFileTool(BaseTool):
@@ -44,22 +45,25 @@ class WriteFileTool(BaseTool):
         content = arguments.get("content", "")
 
         if not rel_path:
-            return "Error: 缺少 path 参数"
+            return format_error(ErrorCode.MISSING_PARAM, "缺少 path 参数")
 
         # 路径穿越防护
         full_path = (self._work_dir / rel_path).resolve()
         if not str(full_path).startswith(str(self._work_dir)):
-            return f"Error: 路径穿越被拦截。'{rel_path}' 超出了工作区范围。"
+            return format_error(
+                ErrorCode.PATH_TRAVERSAL,
+                f"'{rel_path}' 超出了工作区范围",
+            )
 
         try:
             # 自动创建父目录
             full_path.parent.mkdir(parents=True, exist_ok=True)
             full_path.write_text(content, encoding="utf-8")
         except PermissionError:
-            return f"Error: 无权限写入: {rel_path}"
+            return format_error(ErrorCode.PERMISSION_DENIED, f"无权限写入: {rel_path}")
         except IsADirectoryError:
-            return f"Error: '{rel_path}' 是一个目录，无法写入。"
+            return format_error(ErrorCode.IS_DIRECTORY, f"'{rel_path}' 是一个目录，无法写入")
         except Exception as e:
-            return f"Error: 写入文件失败: {e}"
+            return format_error(ErrorCode.FILE_WRITE_FAILED, f"写入文件失败: {e}")
 
         return f"成功将内容写入到文件: {rel_path}"

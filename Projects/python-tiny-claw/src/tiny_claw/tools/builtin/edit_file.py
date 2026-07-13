@@ -10,6 +10,7 @@ from typing import Any
 
 from tiny_claw.tools.base import BaseTool
 from tiny_claw.schema import ToolDefinition
+from tiny_claw.context.recovery import ErrorCode, format_error
 
 logger = logging.getLogger("tiny-claw.tools.edit_file")
 
@@ -18,7 +19,7 @@ def _fuzzy_replace(original: str, old_text: str, new_text: str) -> str:
     """四级模糊匹配替换。
 
     Raises:
-        ValueError: 匹配失败时抛出（调用方转为错误消息返回给模型）
+        ValueError: 匹配失败时抛出（调用方转为 ErrorCode 后发给模型）
     """
     # L1: 精确匹配
     count = original.count(old_text)
@@ -120,32 +121,47 @@ class EditFileTool(BaseTool):
         old_text = arguments.get("old_text", "")
         new_text = arguments.get("new_text", "")
 
-        if not rel_path or not old_text:
-            return "Error: 缺少 path 或 old_text 参数"
+        if not rel_path:
+            return format_error(ErrorCode.MISSING_PARAM, "缺少 path 参数")
+        if not old_text:
+            return format_error(ErrorCode.MISSING_PARAM, "缺少 old_text 参数")
 
-        # 路径穿越防护
         full_path = (self._work_dir / rel_path).resolve()
         if not str(full_path).startswith(str(self._work_dir)):
-            return f"Error: 路径穿越被拦截。'{rel_path}' 超出了工作区范围。"
+            return format_error(
+                ErrorCode.PATH_TRAVERSAL,
+                f"'{rel_path}' 超出了工作区范围",
+            )
 
         # 读取原文件
         try:
             original = full_path.read_text(encoding="utf-8")
         except FileNotFoundError:
-            return f"Error: 文件不存在: {rel_path}"
+            return format_error(ErrorCode.FILE_NOT_FOUND, f"文件不存在: {rel_path}")
+        except PermissionError:
+            return format_error(ErrorCode.PERMISSION_DENIED, f"无权限读取: {rel_path}")
+        except IsADirectoryError:
+            return format_error(ErrorCode.IS_DIRECTORY, f"'{rel_path}' 是一个目录")
         except Exception as e:
-            return f"Error: 读取文件失败: {e}"
+            return format_error(ErrorCode.FILE_READ_FAILED, f"读取文件失败: {e}")
 
-        # 模糊匹配替换
+        # 执行替换
         try:
-            new_content = _fuzzy_replace(original, old_text, new_text)
+            result = _fuzzy_replace(original, old_text, new_text)
         except ValueError as e:
-            return f"Error: {e}"
+            msg = str(e)
+            if "未找到" in msg or "找不到" in msg:
+                return format_error(ErrorCode.EDIT_OLD_TEXT_NOT_FOUND, msg)
+            if "匹配到了" in msg or "多处" in msg:
+                return format_error(ErrorCode.EDIT_MULTIPLE_MATCH, msg)
+            return format_error(ErrorCode.UNKNOWN, msg)
 
-        # 写回
+        # 写入
         try:
-            full_path.write_text(new_content, encoding="utf-8")
+            full_path.write_text(result, encoding="utf-8")
+        except PermissionError:
+            return format_error(ErrorCode.PERMISSION_DENIED, f"无权限写入: {rel_path}")
         except Exception as e:
-            return f"Error: 写回文件失败: {e}"
+            return format_error(ErrorCode.FILE_WRITE_FAILED, f"写入文件失败: {e}")
 
         return f"✅ 成功修改文件: {rel_path}"
