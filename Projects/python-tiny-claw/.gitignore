@@ -1,1 +1,3 @@
 *.egg-info/
+*.claw/traces
+*.claw/sandbox

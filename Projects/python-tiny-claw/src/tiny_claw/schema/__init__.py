@@ -34,6 +34,18 @@ class ToolCall:
 
 
 @dataclass
+class Usage:
+    """单次大模型 API 调用的 Token 消耗 — 对应 Go 的 Usage"""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
+@dataclass
 class Message:
     """上下文中传递的单条消息"""
 
@@ -41,6 +53,8 @@ class Message:
     content: str = ""  # 纯文本内容
     tool_calls: list[ToolCall] = field(default_factory=list)  # 模型决定调用工具时填充
     tool_call_id: str = ""  # 工具调用响应的关联 ID
+    usage: Usage | None = None  # 如果是 Assistant 回复，存放本次调用的 Token 消耗
+    reasoning_content: str = ""  # DeepSeek 慢思考模式下的推理链（不含假工具调用）
 
 
 @dataclass
@@ -67,4 +81,5 @@ __all__ = [
     "ToolCall",
     "ToolResult",
     "ToolDefinition",
+    "Usage",
 ]

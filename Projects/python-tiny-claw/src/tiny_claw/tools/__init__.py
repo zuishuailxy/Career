@@ -2,5 +2,13 @@
 
 from tiny_claw.tools.base import BaseTool
 from tiny_claw.tools.registry import MiddlewareFunc, Registry, RegistryImpl
+from tiny_claw.tools.subagent import AgentRunner, SubagentTool
 
-__all__ = ["BaseTool", "MiddlewareFunc", "Registry", "RegistryImpl"]
+__all__ = [
+    "AgentRunner",
+    "BaseTool",
+    "MiddlewareFunc",
+    "Registry",
+    "RegistryImpl",
+    "SubagentTool",
+]

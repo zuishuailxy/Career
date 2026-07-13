@@ -14,9 +14,53 @@ class Session:
         self.work_dir = work_dir
         self.created_at = datetime.now(timezone.utc)
         self.updated_at = self.created_at
+
+        # 累计 Token 消耗 & 费用
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_cost_cny = 0.0
+
+        # 容错/顺滑度指标
+        self.error_turns = 0  # 至少一次工具调用失败的 Turn 数
+        self.first_error_token: int | None = None  # 首次错误时的累计 Token 数
+        self.total_turns = 0  # 总 Turn 数
+
         self._history: list[Message] = []
         self._lock = asyncio.Lock()
 
+    @property
+    def total_tokens(self) -> int:
+        """当前累计 Token 总数"""
+        return self.total_prompt_tokens + self.total_completion_tokens
+
+    # ------------------------------------------------------------------
+    # 容错追踪
+    # ------------------------------------------------------------------
+    async def mark_error_turn(self) -> None:
+        """标记当前 Turn 有工具调用失败，并记录首次出错的 Token 位置"""
+        async with self._lock:
+            self.error_turns += 1
+            if self.first_error_token is None:
+                self.first_error_token = self.total_tokens
+
+    # ------------------------------------------------------------------
+    # 计费
+    # ------------------------------------------------------------------
+    async def record_usage(
+        self, prompt: int, completion: int, cost: float = 0.0
+    ) -> None:
+        """累加本次调用的 Token 消耗和费用。
+
+        由外部 Tracker 或 engine 在每次 LLM 调用后调用。
+        """
+        async with self._lock:
+            self.total_prompt_tokens += prompt
+            self.total_completion_tokens += completion
+            self.total_cost_cny += cost
+
+    # ------------------------------------------------------------------
+    # 消息管理
+    # ------------------------------------------------------------------
     async def append(self, *msgs: Message) -> None:
         """线程安全地追加消息"""
         async with self._lock:

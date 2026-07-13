@@ -13,7 +13,7 @@ from openai import AsyncOpenAI
 from langsmith.wrappers import wrap_openai
 
 from tiny_claw.provider.base import LLMProvider
-from tiny_claw.schema import Message, Role, ToolCall, ToolDefinition
+from tiny_claw.schema import Message, Role, ToolCall, ToolDefinition, Usage
 
 logger = logging.getLogger("tiny-claw.provider.deepseek")
 
@@ -94,6 +94,10 @@ def _from_openai_response(response: Any) -> Message:
 
     result = Message(role=Role.ASSISTANT, content=choice.content or "")
 
+    # 提取 DeepSeek 慢思考的推理链（不含 fake tool calls 的纯思考文本）
+    if hasattr(choice, "reasoning_content") and choice.reasoning_content:
+        result.reasoning_content = choice.reasoning_content
+
     if choice.tool_calls:
         for tc in choice.tool_calls:
             try:
@@ -107,6 +111,13 @@ def _from_openai_response(response: Any) -> Message:
                     arguments=args,
                 )
             )
+
+    # 提取 Token 消耗（对应 Go 的 Usage 结构体）
+    if response.usage:
+        result.usage = Usage(
+            prompt_tokens=response.usage.prompt_tokens,
+            completion_tokens=response.usage.completion_tokens,
+        )
 
     return result
 
