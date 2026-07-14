@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>成都历史文化古迹·深度探访</title>
+  <link href="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+  <link href="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-100-M/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script defer src="https://unpkg.com/alpinejs@3.10.5/dist/cdn.min.js"></script>
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      font-family: 'Noto Sans SC', sans-serif;
+      background-color: #f5f0e8;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(210, 180, 140, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(139, 119, 90, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(184, 134, 11, 0.05) 0%, transparent 50%);
+      min-height: 100vh;
+    }
+    .serif { font-family: 'Noto Serif SC', serif; }
+    .vintage-card {
+      background: linear-gradient(135deg, #faf6ef 0%, #f5efe6 100%);
+      border: 1px solid rgba(184, 134, 11, 0.15);
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(139, 119, 90, 0.08);
+      transition: all 0.3s ease;
+    }
+    .vintage-card:hover {
+      box-shadow: 0 4px 20px rgba(139, 119, 90, 0.15);
+    }
+    .vintage-card.active {
+      border-color: rgba(184, 134, 11, 0.4);
+      box-shadow: 0 4px 20px rgba(139, 119, 90, 0.18);
+    }
+    .ink-divider {
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(139, 119, 90, 0.3), rgba(184, 134, 11, 0.5), rgba(139, 119, 90, 0.3), transparent);
+      margin: 16px 0;
+    }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .audio-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, #c0392b, #a93226);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(192, 57, 43, 0.3);
+    }
+    .audio-btn.playing {
+      animation: pulse-shadow 1.5s ease-in-out infinite;
+    }
+    .audio-btn.paused {
+      background: linear-gradient(135deg, #e67e22, #d35400);
+    }
+    @keyframes pulse-shadow {
+      0%, 100% { box-shadow: 0 2px 8px rgba(192, 57, 43, 0.3); }
+      50% { box-shadow: 0 2px 16px rgba(192, 57, 43, 0.6); }
+    }
+
+    .expand-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+      opacity: 0;
+    }
+    .expand-content.open {
+      max-height: 2000px;
+      opacity: 1;
+    }
+
+    .header-deco {
+      position: relative;
+      text-align: center;
+      padding: 32px 16px 24px;
+    }
+    .header-deco::before,
+    .header-deco::after {
+      content: '◆';
+      position: absolute;
+      top: 50%;
+      color: rgba(184, 134, 11, 0.25);
+      font-size: 10px;
+    }
+    .header-deco::before { left: 20px; }
+    .header-deco::after { right: 20px; }
+    @media (min-width: 640px) {
+      .header-deco::before { left: 40px; }
+      .header-deco::after { right: 40px; }
+    }
+
+    .seal-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 14px;
+      border: 1.5px solid #c0392b;
+      border-radius: 20px;
+      color: #c0392b;
+      font-size: 12px;
+      font-family: 'Noto Serif SC', serif;
+      letter-spacing: 1px;
+    }
+
+    .intro-text p {
+      margin-bottom: 10px;
+      line-height: 1.8;
+      color: #4a3728;
+      font-size: 14px;
+    }
+
+    .highlight {
+      background: linear-gradient(180deg, transparent 60%, rgba(184, 134, 11, 0.15) 60%);
+      font-weight: 500;
+    }
+
+    .tip-box {
+      background: linear-gradient(135deg, rgba(184, 134, 11, 0.08), rgba(139, 119, 90, 0.05));
+      border-left: 3px solid #b8860b;
+      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
+      margin-top: 12px;
+    }
+
+    @media (max-width: 380px) {
+      .intro-text p { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div x-data="app()" class="max-w-lg mx-auto px-4 pb-10" style="min-height: 100vh;">
+
+    <!-- Header -->
+    <div class="header-deco">
+      <div class="inline-block px-4 py-1 mb-3" style="background: rgba(184,134,11,0.1); border-radius: 4px;">
+        <span class="serif text-xs tracking-widest" style="color: #8b775a;">锦 绣 天 府</span>
+      </div>
+      <h1 class="serif text-2xl font-bold tracking-wide" style="color: #3c2a1e;">
+        成都历史文化古迹
+      </h1>
+      <p class="serif text-sm mt-2" style="color: #8b775a;">
+        深度探访指南
+      </p>
+      <div class="mt-4 flex justify-center">
+        <span class="seal-badge">
+          <i class="fas fa-map-pin text-xs"></i> 七景·全景导览
+        </span>
+      </div>
+    </div>
+
+    <div class="ink-divider"></div>
+
+    <!-- Subtitle -->
+    <p class="text-center text-xs leading-relaxed mb-6" style="color: #a09080;">
+      成都，一座来了就不想走的城市。<br>
+      三千年历史沉淀下的厚重与风雅，<br>
+      让我们一同走进，触摸时光的脉络。
+    </p>
+
+    <!-- Audio Player Bar -->
+    <div x-show="$store.audio.currentId !== null" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
+         class="vintage-card sticky top-2 z-50 p-3 mb-4 flex items-center gap-3" style="backdrop-filter: blur(8px);">
+      <button @click="$store.audio.toggle()" class="audio-btn flex-shrink-0"
+              :class="{ 'playing': !$store.audio.paused, 'paused': $store.audio.paused }">
+        <i class="fas" :class="$store.audio.paused ? 'fa-play' : 'fa-pause'" style="font-size: 14px;"></i>
+      </button>
+      <div class="flex-1 min-w-0">
+        <p class="text-xs font-medium truncate serif" style="color: #5a4a38;">
+          正在播放：<span x-text="$store.audio.currentName" class="font-semibold"></span>
+        </p>
+        <div class="mt-1 h-1 rounded-full overflow-hidden" style="background: rgba(184,134,11,0.12);">
+          <div class="h-full rounded-full transition-all duration-300" :style="'width: ' + $store.audio.progress + '%'" style="background: linear-gradient(90deg, #c0392b, #e67e22);"></div>
+        </div>
+      </div>
+      <button @click="$store.audio.stop()" class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full" style="color: #8b775a; background: rgba(139,119,90,0.1);">
+        <i class="fas fa-times" style="font-size: 12px;"></i>
+      </button>
+    </div>
+
+    <!-- Scenic Spots -->
+    <div class="space-y-4">
+      <template x-for="(spot, index) in spots" :key="spot.id">
+        <div class="vintage-card overflow-hidden" :class="{ 'active': openId === spot.id }">
+          <!-- Header -->
+          <div @click="toggle(spot.id, index)" class="flex items-center gap-3 p-4 cursor-pointer select-none">
+            <!-- Number badge -->
+            <div class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center serif text-sm font-bold"
+                 :style="{ background: spot.color + '18', color: spot.color, border: '2px solid ' + spot.color + '30' }"
+                 x-text="index + 1">
+            </div>
+            <!-- Title -->
+            <div class="flex-1 min-w-0">
+              <h2 class="serif font-bold text-base truncate" style="color: #3c2a1e;" x-text="spot.name"></h2>
+              <p class="text-xs mt-0.5 truncate" style="color: #a09080;" x-text="spot.subtitle"></p>
+            </div>
+            <!-- Audio button -->
+            <button @click.stop="playAudio(spot, index)"
+                    class="audio-btn"
+                    :class="{ 'playing': $store.audio.currentId === spot.id && !$store.audio.paused, 'paused': $store.audio.currentId === spot.id && $store.audio.paused }">
+              <i class="fas"
+                 :class="$store.audio.currentId === spot.id && !$store.audio.paused ? 'fa-volume-up' : 'fa-play'"
+                 style="font-size: 13px;"></i>
+            </button>
+            <!-- Expand indicator -->
+            <i class="fas fa-chevron-down text-xs transition-transform duration-300"
+               style="color: #b8860b;"
+               :class="{ 'rotate-180': openId === spot.id }"></i>
+          </div>
+
+          <!-- Expandable content -->
+          <div class="expand-content" :class="{ 'open': openId === spot.id }">
+            <div class="px-4 pb-4">
+              <div class="ink-divider"></div>
+              <div class="intro-text" x-html="spot.content"></div>
+              <div x-show="spot.tip" class="tip-box">
+                <div class="flex items-start gap-2">
+                  <i class="fas fa-lightbulb text-xs mt-0.5" style="color: #b8860b;"></i>
+                  <p class="text-xs leading-relaxed" style="color: #6b5a48;" x-text="'💡 ' + spot.tip"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Footer Travel Tips Table -->
+    <div class="vintage-card mt-8 p-4">
+      <div class="flex items-center gap-2 mb-4">
+        <i class="fas fa-suitcase-rolling" style="color: #b8860b;"></i>
+        <h3 class="serif font-bold text-base" style="color: #3c2a1e;">旅行锦囊</h3>
+      </div>
+      <div class="overflow-x-auto scrollbar-hide">
+        <table class="w-full text-xs" style="color: #4a3728;">
+          <thead>
+            <tr class="border-b" style="border-color: rgba(184,134,11,0.15);">
+              <th class="text-left py-2 pr-2 font-semibold serif">景点</th>
+              <th class="text-left py-2 px-2 font-semibold serif">门票</th>
+              <th class="text-left py-2 px-2 font-semibold serif">时间</th>
+              <th class="text-left py-2 pl-2 font-semibold serif">游玩</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="spot in spots" :key="'table-' + spot.id">
+              <tr class="border-b" style="border-color: rgba(184,134,11,0.06);">
+                <td class="py-2 pr-2 font-medium serif" x-text="spot.name" style="color: #3c2a1e;"></td>
+                <td class="py-2 px-2" x-text="spot.ticket"></td>
+                <td class="py-2 px-2" x-text="spot.hours"></td>
+                <td class="py-2 pl-2" x-text="spot.duration"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-3 pt-3" style="border-top: 1px solid rgba(184,134,11,0.1);">
+        <p class="text-xs leading-relaxed" style="color: #8b775a;">
+          <i class="fas fa-route mr-1"></i>
+          推荐行程：武侯祠与锦里紧邻，可安排在同一日游览；宽窄巷子与文殊院相距不远，建议一日内串联游览；杜甫草堂适合单独安排半日慢慢品味；望丛祠和刘氏庄园距市区较远，建议单独安排一日游。
+        </p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center mt-8 pb-4">
+      <div class="ink-divider"></div>
+      <p class="text-xs mt-4" style="color: #c0b0a0;">
+        数据来源 · 高德地图 &amp; 百度百科
+      </p>
+      <p class="text-xs mt-1" style="color: #d0c0b0;">
+        以脚步丈量历史，用心灵感受成都
+      </p>
+    </div>
+  </div>
+
+  <!-- Hidden audio element -->
+  <audio id="mainAudio" preload="auto" style="display: none;"></audio>
+
+  <script>
+    function app() {
+      return {
+        openId: null,
+        spots: [
+          {
+            id: 'kzxc',
+            name: '宽窄巷子',
+            subtitle: '老成都的底片，新都市的客厅',
+            color: '#8b6914',
+            audio: '../../../audio/宽窄巷子.aiff',
+            ticket: '免费',
+            hours: '全天开放',
+            duration: '2-3小时',
+            tip: '2011年被评为成都新十景之一。开放式的街区全天免费开放。',
+            content: `<p>宽窄巷子位于成都市青羊区，是成都遗留下来的<span class="highlight">较成规模的清朝古街道</span>，与大慈寺、文殊院一起并称为成都三大历史文化名城保护街区。</p>
+            <p>故事要从康熙五十七年（1718年）说起。清朝廷派三千官兵平息准噶尔叛乱后，选留千余兵丁永留成都并修筑满城——即<span class="highlight">少城</span>。风雨飘零，如今的少城只剩下宽窄两条巷子！</p>
+            <p>宽窄巷子并非只有"宽"和"窄"两条巷子，而是由<span class="highlight">宽巷子、窄巷子和井巷子</span>三条平行排列的老式街道及四合院落群组成，是老成都"千年少城"城市格局和百年原真建筑格局的最后遗存。</p>
+            <p><strong>宽巷子——"闲生活"</strong>：代表了最成都、最市井的民间文化。老人在老茶馆门口安详地喝茶摆龙门阵，猫懒懒地盘在脚下打盹，梧桐树投下斑驳的影子……</p>
+            <p><strong>窄巷子——"慢生活"</strong>：展示的是成都的院落文化。"宅中有园，园里有屋，屋中有院，院中有树，树上有天，天上有月"——这是中国式的院落梦想。</p>
+            <p><strong>井巷子——"新生活"</strong>：宽窄巷子最开放、最多元、最动感的消费空间。法式风情的小洋楼见证了成都兼容并包的开放心态。</p>
+            <p>民间有"<span class="highlight">宽巷子不宽，窄巷子不窄</span>"的说法。两条250米长、不足8米宽的巷子，正因为有了历史，装载着故事，宽窄的感觉更在于人们的心中。</p>`
+          },
+          {
+            id: 'whc',
+            name: '武侯祠',
+            subtitle: '三国圣地，君臣合祀的千古传奇',
+            color: '#a93226',
+            audio: '../../../audio/武侯祠.aiff',
+            ticket: '50元',
+            hours: '09:00-18:00',
+            duration: '2-3小时',
+            tip: '可乘坐地铁3号线至高升桥站D出口步行十分钟即达。',
+            content: `<p>成都武侯祠位于武侯区武侯祠大街231号，占地面积15万平方米，是<span class="highlight">全国唯一一座纪念刘备、诸葛亮、关羽、张飞等蜀汉英雄的君臣合祀祠庙</span>，也是全世界影响最大的三国遗迹博物馆，享有"<span class="highlight">三国圣地</span>"之美誉。</p>
+            <p>这座祠庙肇始于公元222年刘备修建惠陵之时。明洪武二十四年（1391年），蜀献王朱椿主张"君臣宜一体"，废弃惠陵旁的武侯祠，重修汉昭烈庙，将诸葛亮的塑像塑入汉昭烈庙内，实现了"一祠同祀君臣"的独特格局。</p>
+            <p>武侯祠坐北朝南，主体建筑沿中轴线依次排列：<span class="highlight">大门、二门、汉昭烈庙、过厅、武侯祠、三义庙</span>，共七重。</p>
+            <p><strong>刘备殿</strong>：二门上方悬匾大书"<span class="highlight">明良千古</span>"四个大字，意为"明君良臣，千古垂范"。殿前文臣武将廊共有28座蜀汉文臣武将的泥塑。</p>
+            <p><strong>诸葛亮殿</strong>：悬挂"静远堂"匾额。诸葛亮塑像端坐正中，左边是儿子诸葛瞻，右边是孙子诸葛尚，子孙三代人称"<span class="highlight">三世忠贞</span>"。</p>
+            <p><strong>惠陵</strong>：诸葛亮殿西侧便是刘备墓——惠陵，由诸葛亮亲选宝地。</p>
+            <p><strong>三绝碑</strong>：全名《蜀丞相诸葛武侯祠堂碑》，由裴度撰文、柳公绰书、鲁建镌刻，文章、书法、镌刻均精湛绝伦，故得"三绝"之名。</p>`
+          },
+          {
+            id: 'jinli',
+            name: '锦里',
+            subtitle: '西蜀第一街，梦回三国的烟火人间',
+            color: '#d35400',
+            audio: '../../../audio/锦里.aiff',
+            ticket: '免费',
+            hours: '全天（灯组22:00关闭）',
+            duration: '1-2小时',
+            tip: '24小时免费开放，光彩灯组22:00关闭。晚上逛锦里更有韵味！',
+            content: `<p>锦里与武侯祠仅一墙之隔。传说锦里曾是西蜀历史上<span class="highlight">最古老、最具有商业气息的街道之一</span>，早在秦汉、三国时期便闻名全国。街道全长550米，建筑以清末民初四川民居风格为基础。</p>
+            <p>"<span class="highlight">拜武侯、泡锦里</span>"已成为成都旅游最具号召力的口号之一。</p>
+            <p><strong>古戏台</strong>：沿用中国传统戏台结构，"出将""入相"之间上演川戏经典剧目。</p>
+            <p><strong>九品小吃街</strong>：九为阳数之极，"品"有三个口，九品就有二十七个口——意思是小吃多到二十七个口都吃不过来！张飞牛肉、肥肠粉、三大炮、伤心凉粉、钵钵鸡……琳琅满目。</p>
+            <p><strong>诸葛井</strong>：相传为诸葛亮为民谋利所挖掘的水井。井上对联写道："一泓清水鉴风云，三顾隆情真蜀汉"。</p>
+            <p><strong>阿斗井</strong>：相传刘禅每年祭拜先父时在此驻足休息，"扶不起的阿斗"典故正源于此处。</p>
+            <p><strong>民俗记忆墙</strong>：将蜀锦、蜀绣、瓷胎竹编、成都漆器等非遗作品封存于墙中，将于百年后的2109年开启。</p>
+            <p>锦里2021年被CNN评选为<span class="highlight">全球最美的21条街道之一</span>。</p>`
+          },
+          {
+            id: 'dfct',
+            name: '杜甫草堂',
+            subtitle: '诗圣的茅屋，中国文学的朝圣地',
+            color: '#2d7d46',
+            audio: '../../../audio/杜甫草堂.aiff',
+            ticket: '50元',
+            hours: '09:00-18:00',
+            duration: '2-3小时',
+            tip: '位于青羊区青华路37号。每年三四月间，园内梅花盛开，美不胜收。',
+            content: `<p>公元759年冬天，为避"安史之乱"，47岁的杜甫携家带口来到成都。次年春，在浣花溪畔修建茅屋居住，这便是著名的<span class="highlight">成都草堂</span>。</p>
+            <p>杜甫在这里写下了240余首传世诗篇，其中包括——"<span class="highlight">好雨知时节，当春乃发生。随风潜入夜，润物细无声</span>"，以及"<span class="highlight">安得广厦千万间，大庇天下寒士俱欢颜</span>"。</p>
+            <p>草堂总面积近300亩，<span class="highlight">照壁、正门、大廨、诗史堂、柴门、工部祠</span>排列在一条中轴线上，其间流水萦回，小桥勾连，竹树掩映。</p>
+            <p><strong>诗史堂</strong>：中轴线上的主体建筑。杜甫被后世尊为"诗圣"，其诗被称为"诗史"。</p>
+            <p><strong>工部祠</strong>：因杜甫曾担任检校工部员外郎而得名。清代将黄庭坚、陆游配祀于杜甫像两侧，故又称"三贤堂"。</p>
+            <p><strong>少陵草堂碑亭</strong>：草堂最具代表性的建筑之一，"少陵草堂"四字为清代果亲王允礼所书。</p>
+            <p><strong>花径</strong>：红墙夹道小径，尽头是用青花碎瓷镶嵌的"草堂"影壁。</p>
+            <p>杜甫草堂1961年被列为第一批全国重点文物保护单位，2008年被评为首批国家一级博物馆。</p>`
+          },
+          {
+            id: 'wsy',
+            name: '文殊院',
+            subtitle: '千年古刹，闹市中的心灵净土',
+            color: '#7d4e2d',
+            audio: '../../../audio/文殊院.aiff',
+            ticket: '免费',
+            hours: '08:00-17:00',
+            duration: '1-2小时',
+            tip: '乘坐地铁1号线在文殊院站下车即达。寺内还有著名的文殊院素斋，值得一试！',
+            content: `<p>文殊院又名"空林堂"，位于成都市青羊区，始建于<span class="highlight">隋朝大业年间（605-617年）</span>，距今已有一千四百多年历史，初名信相寺。</p>
+            <p>明末张献忠入川，信相寺毁于兵火，唯有<span class="highlight">10尊铁铸护戒神像和两株千年古杉</span>尚存。</p>
+            <p>清康熙年间，慈笃禅师在荒芜的古寺间结茅苦修，百姓感其神奇，认为是"文殊菩萨"现世，遂更名为<span class="highlight">文殊院</span>。康熙皇帝御赐"空林"绢本横幅，文殊院因此又名"空林堂"。</p>
+            <p>文殊院是成都市内保存最为完整的佛教寺庙。殿宇六重：<span class="highlight">天王殿、三大士殿、大雄宝殿、说法堂、宸经楼、文殊阁</span>。</p>
+            <p><strong>镇寺之宝——空林二圣</strong></p>
+            <p><strong>佛骨舍利</strong>：20世纪20年代，蜀中大德能海上师朝礼印度菩提伽耶时请回供奉。</p>
+            <p><strong>玄奘法师顶骨舍利</strong>：因成都是玄奘法师出家后受戒之地，从南京请回供奉。玄奘法师被鲁迅先生誉为"<span class="highlight">民族脊梁</span>"。</p>
+            <p>还有"空林八观"：康熙御笔、缅甸玉佛、北魏石刻群像、千年双杉、田妃绣制的248尊佛像袈裟、血书佛经四部、发绣水月观音像、金刚经塔，每一件都是国宝级珍品。</p>`
+          },
+          {
+            id: 'wcc',
+            name: '望丛祠',
+            subtitle: '蜀中第一祠，一祠祭二主的帝王陵冢',
+            color: '#5a6b3d',
+            audio: '../../../audio/望丛祠.aiff',
+            ticket: '免费',
+            hours: '08:00-18:00',
+            duration: '1-2小时',
+            tip: '位于郫都区望丛中路5号。2025年6月提档升级后重新开放。',
+            content: `<p>望丛祠位于成都市郫都区，是为了纪念<span class="highlight">最早的蜀王望帝杜宇</span>和他的继任人<span class="highlight">丛帝鳖灵</span>而修建的祀祠，也是<span class="highlight">中国西南地区唯一的一祠祭二主</span>、凭吊蜀人先贤的最大帝王陵冢，至今已有1500多年历史。</p>
+            <p>传说二千七百年前，望帝杜宇在郫县建立了蜀国第一个有文字记载的首都——<span class="highlight">杜鹃城</span>。杜宇教民务农，被尊为<span class="highlight">农神</span>。丞相鳖灵"决玉垒山以除水害"，奠定了都江堰工程的基础。杜宇禅让后退隐西山，死后化为杜鹃鸟——"<span class="highlight">杜鹃啼血</span>"的美丽传说便由此而来。</p>
+            <p>祠门不是单开单向，而是对称地开辟<span class="highlight">南北二门</span>。祠内南北贯通着大片水域——鳖灵湖。</p>
+            <p>望帝陵周长200多米，高10多米，是<span class="highlight">西南地区最大的帝王陵墓</span>。丛帝陵周长100米，高10米。两座帝陵隔湖相望。</p>
+            <p>每年农历五月十五的<span class="highlight">望丛赛歌会</span>，是汉民族唯一保留下来的赛歌形式，现为省级非物质文化遗产。</p>`
+          },
+          {
+            id: 'lszy',
+            name: '刘氏庄园博物馆',
+            subtitle: '川西百年庄园，凝固的民国记忆',
+            color: '#5a4a6a',
+            audio: '../../../audio/刘氏庄园.aiff',
+            ticket: '40元',
+            hours: '09:00-17:00',
+            duration: '2-3小时',
+            tip: '建议与安仁古镇、建川博物馆一同游览。',
+            content: `<p>大邑刘氏庄园博物馆位于成都市大邑县安仁镇，原为川西大地主刘文彩的私家住宅，是目前我国<span class="highlight">保存最完好的封建地主庄园之一</span>。庄园占地10万余平方米，房屋共545间。</p>
+            <p>庄园由南北相望的两大建筑群构成：</p>
+            <p><strong>老公馆</strong>（刘文彩公馆）：始建于1928年，房屋160余间，大小天井27个。青砖碧瓦、雕梁画栋，整体中西合璧。</p>
+            <p><strong>新公馆</strong>（刘文辉公馆）：始建于1938年，大门气势轩昂，有西方城堡和教堂建筑的特色，是中国近现代优秀代表性建筑之一。</p>
+            <p><strong>《收租院》泥塑群雕</strong>：蜚声中外的大型泥塑群雕，是中国现代雕塑史上的经典之作。</p>
+            <p><strong>文物珍品馆</strong>：8个展厅展示太平天国天王府遗物——紫檀木螺钿大理石家具、九层镂空雕刻象牙球、象牙白菜雕刻等国宝级文物。</p>
+            <p>这里是中国近现代社会发展史的一个断面，每一个角落都凝固着百年的记忆。</p>`
+          }
+        ],
+        toggle(id, index) {
+          this.openId = this.openId === id ? null : id;
+        },
+        playAudio(spot, index) {
+          const audioEl = document.getElementById('mainAudio');
+          const store = this.$store.audio;
+
+          if (store.currentId === spot.id) {
+            store.toggle();
+            return;
+          }
+
+          if (store.currentId !== null) {
+            audioEl.pause();
+          }
+
+          audioEl.src = spot.audio;
+          store.currentId = spot.id;
+          store.currentName = spot.name;
+          store.paused = false;
+          audioEl.play().catch(() => {
+            store.currentId = null;
+            store.currentName = '';
+            store.paused = true;
+          });
+
+          audioEl.ontimeupdate = () => {
+            if (audioEl.duration) {
+              store.progress = (audioEl.currentTime / audioEl.duration) * 100;
+            }
+          };
+          audioEl.onended = () => {
+            store.currentId = null;
+            store.currentName = '';
+            store.paused = true;
+            store.progress = 0;
+          };
+        }
+      };
+    }
+  </script>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('audio', {
+        currentId: null,
+        currentName: '',
+        paused: true,
+        progress: 0,
+
+        toggle() {
+          const audioEl = document.getElementById('mainAudio');
+          if (this.paused) {
+            audioEl.play().catch(() => {});
+            this.paused = false;
+          } else {
+            audioEl.pause();
+            this.paused = true;
+          }
+        },
+
+        stop() {
+          const audioEl = document.getElementById('mainAudio');
+          audioEl.pause();
+          audioEl.currentTime = 0;
+          this.currentId = null;
+          this.currentName = '';
+          this.paused = true;
+          this.progress = 0;
+        }
+      });
+    });
+  </script>
+
+</body>
+</html>

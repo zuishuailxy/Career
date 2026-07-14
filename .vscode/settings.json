@@ -3,5 +3,6 @@
   "python-envs.defaultEnvManager": "ms-python.python:venv",
   "python.analysis.extraPaths": [
     "${workspaceFolder}/Projects/python-tiny-claw/src"
-  ]
+  ],
+  "chat.mcp.serverSampling": {}
 }
