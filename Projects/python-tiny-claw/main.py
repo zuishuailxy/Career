@@ -147,26 +147,32 @@ async def run_cli(
 # ═══════════════════════════════════════════════════════════════
 
 
-def run_feishu() -> None:
-    """飞书模式：启动 FeishuBot + 注入审批中间件"""
+def run_feishu(work_dir: str) -> None:
+    """飞书模式（AgentOps）：启动 FeishuBot + 审批中间件 + 生产级配置"""
     from tiny_claw.feishu import FeishuBot, create_approval_middleware
 
-    work_dir = os.getcwd()
-    engine = build_engine(work_dir)
+    work_dir = os.path.abspath(work_dir)
+    logger.info("🚀 正在启动 tiny-claw AgentOps 飞书服务端...")
+    logger.info("📁 工作区: %s", work_dir)
 
-    # ---- 创建持久化 Session ----
-    session_id = os.getenv("FEISHU_SESSION_ID", "feishu-default")
-    sess = Session(session_id, work_dir)
+    # 引擎工厂：每次消息创建独立引擎（计费隔离 + 安全防御）
+    def engine_factory(session: Session) -> AgentEngine:
+        # AgentOps 生产环境：关闭慢思考（省 Token）、关闭计划模式（运维不需要）
+        engine = build_engine(
+            work_dir,
+            plan_mode=False,
+            enable_thinking=False,
+        )
+        if isinstance(engine.provider, CostTracker):
+            engine.provider.bind_session(session)
+        # 注入审批中间件：高危操作挂起等待飞书人工确认
+        engine.registry.use(create_approval_middleware(reporter=lambda: bot.reporter))
+        return engine
 
-    # ---- 启动飞书 ----
-    bot = FeishuBot(engine, sess)
+    bot = FeishuBot(engine_factory, work_dir)
 
-    # ---- 注入审批中间件（延迟解析 reporter）----
-    # bot.reporter 在 _handle_agent 时才绑定，但中间件在 execute 时才触发
-    # 使用 lambda 延迟解析，确保运行时 reporter 已就绪
-    engine.registry.use(create_approval_middleware(reporter=lambda: bot.reporter))
-
-    logger.info("🚀 tiny-claw 飞书模式启动（WebSocket 长连接）...")
+    logger.info("🛡️ 安全防御 Middleware 已挂载。")
+    logger.info("📡 飞书长连接已启动，等待消息...")
     bot.start()
 
 
@@ -180,8 +186,8 @@ def main():
     parser.add_argument(
         "-p",
         "--prompt",
-        required=True,
-        help="要交给 Agent 执行的任务描述",
+        default=None,
+        help="要交给 Agent 执行的任务描述（CLI 模式必填）",
     )
     parser.add_argument(
         "-d",
@@ -221,6 +227,9 @@ def main():
         if not os.getenv("FEISHU_APP_ID") or not os.getenv("FEISHU_APP_SECRET"):
             logger.fatal("飞书模式需要设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
             sys.exit(1)
+    else:
+        if not args.prompt:
+            parser.error("CLI 模式必须指定 -p/--prompt")
 
     if not os.getenv("DEEPSEEK_API_KEY"):
         logger.fatal("请先设置 DEEPSEEK_API_KEY 环境变量")
@@ -229,7 +238,7 @@ def main():
     work_dir = os.path.abspath(args.dir)
 
     if args.mode == "feishu":
-        run_feishu()
+        run_feishu(work_dir)
     else:
         asyncio.run(
             run_cli(

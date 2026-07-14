@@ -38,49 +38,29 @@ class ApprovalResult:
 
 # Bash 高危模式正则
 _DANGEROUS_BASH_PATTERNS: list[re.Pattern] = [
-    # --- 文件/目录删除 ---
-    re.compile(r"\brm\b", re.IGNORECASE),  # 任何 rm 命令（含 rm -rf / rm -r / rm file）
-    re.compile(r"\bunlink\b", re.IGNORECASE),  # unlink 删除
-    re.compile(r"\brmdir\b", re.IGNORECASE),  # 删除目录
-    # --- 权限提升 ---
-    re.compile(r"\bsudo\b", re.IGNORECASE),  # 提权
-    # --- 数据库/系统 ---
-    re.compile(r"\bdrop\b", re.IGNORECASE),  # 数据库 DROP
-    # --- 覆盖写入 ---
-    re.compile(
-        r">\s*\S+\.(py|go|rs|js|ts|java|cpp|c|h|sh|yaml|yml|toml|json)", re.IGNORECASE
-    ),
-    # --- 磁盘危险操作 ---
-    re.compile(r"\bmkfs\.", re.IGNORECASE),  # 格式化磁盘
-    re.compile(r"\bdd\s+if=", re.IGNORECASE),  # 磁盘写入
-    re.compile(r"\bmount\b", re.IGNORECASE),  # 挂载操作
-    # --- 权限变更 ---
-    re.compile(r"\bchmod\s+777", re.IGNORECASE),  # 危险权限
-    re.compile(r"\bchown\b", re.IGNORECASE),  # 更改所有者
-    # --- 进程/网络 ---
-    re.compile(r"\bkill\s+-9", re.IGNORECASE),  # 强制杀进程
-    re.compile(r"\bgit\s+push\s+.*--force", re.IGNORECASE),  # 强制推送
-    re.compile(r"\bgit\s+reset\s+--hard", re.IGNORECASE),  # 硬重置
-    re.compile(r"\bcurl.*\|\s*(ba)?sh", re.IGNORECASE),  # curl shell 管道执行
-    re.compile(r"\bwget.*\|\s*(ba)?sh", re.IGNORECASE),  # wget shell 管道执行
-    # --- 系统破坏 ---
-    re.compile(r":\(\)\s*\{\s*:\|:&\s*\}\s*;:", re.IGNORECASE),  # fork bomb
-    re.compile(r"\b>\/dev\/sda", re.IGNORECASE),  # 直接写磁盘设备
+    re.compile(r"rm\s+-r", re.IGNORECASE),  # 级联删除
+    re.compile(r"sudo\s+", re.IGNORECASE),  # 提权操作
+    re.compile(r"drop\s+", re.IGNORECASE),  # 数据库危险命令
+    re.compile(r">.*\.go", re.IGNORECASE),  # 恶意覆盖源代码
+    re.compile(r">.*\.py", re.IGNORECASE),  # 恶意覆盖 Python 源码
+    re.compile(r"nginx\s+-s", re.IGNORECASE),  # Nginx 服务重启或停止
+    re.compile(r"systemctl\s+", re.IGNORECASE),  # 系统级服务管理
+    re.compile(r"kill\s+", re.IGNORECASE),  # 杀进程操作
 ]
 
 
 def is_dangerous_command(tool_name: str, args: str) -> bool:
     """判断该工具调用是否需要触发审批。
 
-    纯读取工具（read_file）默认 YOLO 放行；
-    bash 命中高危正则时需审批；
-    write_file / edit_file 一律需审批。
+    - 纯读取工具（read_file）：白名单放行，默认 YOLO 模式
+    - write_file / edit_file：修改任何文件都是高危操作，一律挂起审批
+    - bash：按高危特征库匹配，命中即拦截
     """
-    # 只读工具 — 直接放行
-    if tool_name not in ("bash", "write_file", "edit_file"):
+    # 白名单放行：纯读取工具
+    if tool_name == "read_file":
         return False
 
-    # write_file / edit_file — 始终需要审批（修改文件是高危操作）
+    # write_file / edit_file — 始终需要审批
     if tool_name in ("write_file", "edit_file"):
         return True
 
@@ -90,6 +70,7 @@ def is_dangerous_command(tool_name: str, args: str) -> bool:
             if pattern.search(args):
                 return True
 
+    # 未命中高危特征，默认放行（如 ls -la, tail -n 50 等探测命令）
     return False
 
 

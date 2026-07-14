@@ -6,23 +6,21 @@ import logging
 import os
 from typing import Any
 
+from collections.abc import Callable
+
 from lark_oapi import Client
 from lark_oapi.event.dispatcher_handler import EventDispatcherHandler
 from lark_oapi.ws import Client as WsClient
 from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
 from tiny_claw.engine import AgentEngine, Reporter
-from tiny_claw.engine.session import Session
+from tiny_claw.engine.session import Session, global_session_mgr
 from tiny_claw.schema import Message, Role
-from tiny_claw.tools.builtin import (
-    ReadFileTool,
-    WriteFileTool,
-    BashTool,
-    EditFileTool,
-    SkillTool,
-)
 
 logger = logging.getLogger("tiny-claw.feishu")
+
+# 引擎工厂签名：接收 Session，返回装配完毕的 AgentEngine
+EngineFactory = Callable[[Session], AgentEngine]
 
 
 class FeishuReporter(Reporter):
@@ -75,9 +73,9 @@ class FeishuReporter(Reporter):
 
 
 class FeishuBot:
-    """飞书机器人 — 长连接模式"""
+    """飞书机器人 — 长连接模式 + 引擎工厂"""
 
-    def __init__(self, engine: AgentEngine, session: Session):
+    def __init__(self, factory: EngineFactory, work_dir: str):
         app_id = os.getenv("FEISHU_APP_ID", "")
         app_secret = os.getenv("FEISHU_APP_SECRET", "")
         if not app_id or not app_secret:
@@ -85,8 +83,8 @@ class FeishuBot:
         self._app_id = app_id
         self._app_secret = app_secret
         self._client = Client.builder().app_id(app_id).app_secret(app_secret).build()
-        self._engine = engine
-        self._sess = session  # 绑定持久化 Session，跨消息复用上下文
+        self._factory = factory  # 引擎工厂：每次收到消息时按 Session 动态创建
+        self._work_dir = work_dir
         self._reporter: FeishuReporter | None = None
         logger.info("飞书机器人初始化完成（长连接模式）")
 
@@ -119,28 +117,26 @@ class FeishuBot:
         WsClient(self._app_id, self._app_secret, event_handler=handler).start()
 
     async def _handle_agent(self, chat_id: str, prompt: str) -> None:
-        # 绑定当前会话的 Reporter
+        # 1. 为当前会话创建专属 Reporter
         self._reporter = FeishuReporter(self._client, chat_id)
 
-        # 工具按工作区注册（首次）
-        work_dir = os.getcwd()
-        self._engine.registry.register(ReadFileTool(work_dir))
-        self._engine.registry.register(WriteFileTool(work_dir))
-        self._engine.registry.register(BashTool(work_dir))
-        self._engine.registry.register(EditFileTool(work_dir))
-        self._engine.registry.register(SkillTool(work_dir))
+        # 2. 获取/创建物理隔离的 Session（按 chat_id 隔离）
+        sess = await global_session_mgr.get_or_create(chat_id, self._work_dir)
+        await sess.append(Message(role=Role.USER, content=prompt))
 
-        # 将用户 prompt 压入持久化 Session，复用跨消息上下文
-        await self._sess.append(Message(role=Role.USER, content=prompt))
+        # 3. 通过工厂模式，为当前 Session 生成一个装配完毕的引擎
+        #    工厂内部会将 CostTracker 绑定到该 Session，确保计费隔离
+        engine = self._factory(sess)
 
-        old = self._engine.reporter
-        self._engine.reporter = self._reporter
+        # 4. 注入 Reporter 并执行
+        old = engine.reporter
+        engine.reporter = self._reporter
         try:
-            await self._engine.run(self._sess)
+            await engine.run(sess)
         except Exception as e:
             await self._reporter.send_msg(f"❌ Agent 运行崩溃: {e}")
         finally:
-            self._engine.reporter = old
+            engine.reporter = old
 
     @property
     def reporter(self) -> FeishuReporter | None:
