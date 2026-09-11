@@ -4,33 +4,39 @@ version = "0.1.0"
 description = "Python rewrite of go-tiny-claw — AI agent with Feishu integration"
 readme = "README.md"
 requires-python = ">=3.12"
+# 只列真正 import 的包 —— 依赖表必须和代码对齐，否则装一堆用不上的东西，
+# 还会让人以为项目里有 FastAPI 服务 / LangGraph 编排（实际都是课程脚手架遗留）。
+#   推理循环是手写的，不走 LangGraph；HTTP 层是 openai / anthropic 官方 SDK；
+#   链路追踪只用 langsmith 的 @traceable（不依赖 LangChain）。
 dependencies = [
-    "langchain-core>=0.3",
-    "langchain-openai>=0.2",
-    "langchain-deepseek>=0.1",
-    "langgraph>=0.2",
-    "python-dotenv>=1.0",
-    "httpx>=0.27",
-    "pydantic>=2.0",
-    "langsmith>=0.3",
     "openai>=2.44.0",
-    "lark-oapi>=1.4",
-    "fastapi>=0.115",
-    "uvicorn>=0.34",
     "anthropic>=0.40",
+    "lark-oapi>=1.4",
+    "langsmith>=0.3",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+    # 单测里要构造 SDK 的 StdioServerParameters 对象（不发真实请求），
+    # 所以开发环境也装上 MCP SDK
+    "mcp>=2.0",
+]
+# MCP 客户端能力（Phase 0 探针已在用）。先用 extra 装，避免核心依赖被
+# uvicorn / starlette 这类 SDK 传递依赖撑大；Phase 1-3 落地后再提升为核心依赖。
+mcp = [
+    "mcp>=2.0",
 ]
 
 [tool.uv]
 package = true
 
 [project.scripts]
-tiny-claw = "tiny_claw.main:main"
+# 入口在包内（src/tiny_claw/cli.py）。根目录另留一个 main.py 兼容壳，
+# 使 `python main.py` 与 `tiny-claw` 两种用法都成立。
+tiny-claw = "tiny_claw.cli:main"
 
 [build-system]
 requires = ["setuptools>=75"]
