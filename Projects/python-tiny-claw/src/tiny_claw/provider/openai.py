@@ -6,19 +6,18 @@
 from collections.abc import AsyncIterator
 import json
 import logging
-import os
 from typing import Any
 
 from openai import AsyncOpenAI
 from langsmith.wrappers import wrap_openai
 
+from tiny_claw import config
 from tiny_claw.provider.base import LLMProvider
 from tiny_claw.schema import Message, Role, ToolCall, ToolDefinition, Usage
 
 logger = logging.getLogger("tiny-claw.provider.deepseek")
 
-DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-DEFAULT_MODEL = "deepseek-v4-pro"
+# 端点 / 模型名 / 凭据统一来自 tiny_claw.config（可用 .env 覆盖），此处不硬编码。
 
 
 def _to_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:
@@ -95,8 +94,9 @@ def _from_openai_response(response: Any) -> Message:
     result = Message(role=Role.ASSISTANT, content=choice.content or "")
 
     # 提取 DeepSeek 慢思考的推理链（不含 fake tool calls 的纯思考文本）
+    # 归一化到统一的 reasoning 字段，与 Anthropic 的 thinking block 对齐
     if hasattr(choice, "reasoning_content") and choice.reasoning_content:
-        result.reasoning_content = choice.reasoning_content
+        result.reasoning = choice.reasoning_content
 
     if choice.tool_calls:
         for tc in choice.tool_calls:
@@ -125,19 +125,22 @@ def _from_openai_response(response: Any) -> Message:
 class DeepSeekProvider(LLMProvider):
     """DeepSeek Provider — 基于 OpenAI 兼容接口"""
 
-    def __init__(self, model: str = DEFAULT_MODEL):
-        api_key = os.getenv("DEEPSEEK_API_KEY", "")
+    def __init__(self, model: str | None = None):
+        api_key = config.deepseek_api_key()
         if not api_key:
-            raise ValueError("请设置 DEEPSEEK_API_KEY 环境变量")
+            raise ValueError(
+                "未找到模型凭据：请在项目根 .env 中设置 DEEPSEEK_API_KEY，"
+                "或设置环境变量 DEEPSEEK_API_KEY"
+            )
 
         self.client = wrap_openai(
             AsyncOpenAI(
                 api_key=api_key,
-                base_url=DEEPSEEK_BASE_URL,
+                base_url=config.deepseek_base_url(),
             )
         )
-        self.model = model
-        logger.info("DeepSeek provider 初始化完成，模型: %s", model)
+        self.model = model or config.MODEL
+        logger.info("DeepSeek provider 初始化完成，模型: %s", self.model)
 
     async def generate(
         self,
