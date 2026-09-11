@@ -9,13 +9,13 @@ import asyncio
 import contextvars
 import json
 import logging
-import os
 import time
 from collections.abc import AsyncIterator
 from functools import wraps
 from pathlib import Path
 from typing import Any
 
+from tiny_claw import config
 from tiny_claw.provider.base import LLMProvider
 from tiny_claw.schema import Message, ToolDefinition
 
@@ -25,16 +25,57 @@ logger = logging.getLogger("tiny-claw.tracker")
 # 定价模型（人民币/百万 Token）
 # ═══════════════════════════════════════════════════════════════
 
+# 口径说明（务必读完再用这个数字做任何结论）：
+#   1. 取「空闲时段 + 缓存未命中」价 —— 这是**偏高的上界**。DeepSeek 按前缀
+#      自动缓存，Agent 循环里 system prompt 与历史前缀不变，命中率通常很高，
+#      命中价仅 0.05 元/百万，比未命中便宜 30 倍。所以真实扣费一般低于此。
+#   2. 高峰时段（北京时间 9:00-12:00、14:00-18:00）为下表价格的 **2 倍**。
+#   3. 来源：api-docs.deepseek.com/zh-cn/quick_start/pricing（2026-09-09 核对）。
+#      ⚠️ deepseek-v4-flash 自 2026-09-10 12:00 起降价，届时未命中输入
+#      1.5→1.0、输出 4.5→4.0（元/百万）。若在此之后跑分请同步更新本表，
+#      否则成本会被系统性高估约 33%。
 PRICING: dict[str, dict[str, float]] = {
-    "deepseek-chat": {"input": 1.0, "output": 4.0},
-    "deepseek-reasoner": {"input": 4.0, "output": 16.0},
-    "deepseek-v4-pro": {"input": 1.0, "output": 4.0},
+    # 旧模型名（官方公告 2026/07/24 起逐步弃用，等价于 v4-flash 的非思考/思考模式）
+    "deepseek-chat": {"input": 1.5, "output": 4.5},
+    "deepseek-reasoner": {"input": 1.5, "output": 4.5},
+    "deepseek-v4-flash": {"input": 1.5, "output": 4.5},
+    "deepseek-v4-flash-vision-exp": {"input": 1.5, "output": 4.5},
+    # Pro 约为 Flash 的 3 倍
+    "deepseek-v4-pro": {"input": 4.5, "output": 13.5},
 }
+
+# 已告警过的未知模型，避免每个 chunk 刷屏
+_warned_unknown_models: set[str] = set()
+
+
+def _resolve_price(model: str) -> dict[str, float] | None:
+    """查表，未命中则回退到 .env 里的自定义单价。
+
+    注意：PRICING 只覆盖已核实公开价格的模型。新模型（如 v4-flash）未收录时
+    绝不猜价格——猜出来的成本会直接污染 benchmark 结论。
+    """
+    price = PRICING.get(model)
+    if price:
+        return price
+
+    custom = config.custom_price()
+    if custom:
+        return {"input": custom[0], "output": custom[1]}
+
+    if model not in _warned_unknown_models:
+        _warned_unknown_models.add(model)
+        logger.warning(
+            "[Tracker] ⚠️ 模型 %s 未在 PRICING 表中，成本将统计为 0。"
+            "如需计费请在 .env 设置 TINY_CLAW_PRICE_INPUT / TINY_CLAW_PRICE_OUTPUT"
+            "（单位：元/百万 token）",
+            model,
+        )
+    return None
 
 
 def _calculate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    price = PRICING.get(model)
-    if not price:
+    price = _resolve_price(model)
+    if price is None:
         return 0.0
     return (
         prompt_tokens / 1_000_000 * price["input"]
