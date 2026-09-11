@@ -8,14 +8,16 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from tiny_claw import config
 from tiny_claw.tools.base import BaseTool
 from tiny_claw.schema import ToolDefinition
 from tiny_claw.context.recovery import ErrorCode, format_error
 
 logger = logging.getLogger("tiny-claw.tools.bash")
 
-TIMEOUT = 30  # 命令最大执行秒数
-MAX_OUTPUT = 8000  # 最大输出字节数
+# 常量保留原名（模块内引用），真实来源已迁至 tiny_claw.config
+TIMEOUT = config.BASH_TIMEOUT  # 命令最大执行秒数
+MAX_OUTPUT = config.BASH_MAX_OUTPUT  # 最大输出字符数（⚠️ 字符口径，不是字节）
 
 
 class BashTool(BaseTool):
@@ -98,10 +100,13 @@ class BashTool(BaseTool):
             return "命令执行成功，无终端输出。"
 
         # 长度截断保护（防 OOM）
-        if len(output.encode("utf-8")) > MAX_OUTPUT:
+        # ⚠️ 判定与切分必须同为字符口径。旧实现是「字节判断 + 字符切分」，
+        # 中文（UTF-8 一字 3 字节）实际会截出 3 倍于阈值的内容，且提示语宣称的
+        # 字节数与事实不符——与 read_file 曾踩的坑完全相同。
+        if len(output) > MAX_OUTPUT:
             return (
                 output[:MAX_OUTPUT]
-                + f"\n\n...[终端输出过长，已截断至前 {MAX_OUTPUT} 字节]..."
+                + f"\n\n...[终端输出过长，已截断至前 {MAX_OUTPUT} 字符]..."
             )
 
         return output
