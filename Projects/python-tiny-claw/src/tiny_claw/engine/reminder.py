@@ -8,7 +8,13 @@ import hashlib
 import json
 import logging
 
-from tiny_claw.schema import Message, Role, ToolCall, ToolResult
+from tiny_claw.schema import (
+    SYSTEM_REMINDER_PREFIX,
+    Message,
+    Role,
+    ToolCall,
+    ToolResult,
+)
 
 logger = logging.getLogger("tiny-claw.engine.reminder")
 
@@ -16,7 +22,7 @@ logger = logging.getLogger("tiny-claw.engine.reminder")
 NAG_THRESHOLD = 3
 
 # 打断消息模板
-NUDGE_TEMPLATE = """[SYSTEM REMINDER 警告] 
+NUDGE_TEMPLATE = SYSTEM_REMINDER_PREFIX + """ 警告] 
 你似乎陷入了死循环。你刚刚连续 {fail_count} 次使用相同的参数调用了 '{tool_name}' 工具，并且都失败了。
 请立即停止这种无效的重试！你的注意力被当前的报错过度吸引了。
 你需要：
@@ -83,4 +89,8 @@ class ReminderInjector:
             fail_count=fail_count,
             tool_name=tool_call.name,
         )
-        return Message(role=Role.USER, content=nudge_msg)
+        return Message(
+            role=Role.USER,
+            content=nudge_msg,
+            is_system_reminder=True,  # 不是用户指令，压缩时可清理
+        )
