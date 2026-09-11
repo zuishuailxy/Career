@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import os
 from typing import Any
 
 from collections.abc import Callable
@@ -13,6 +12,7 @@ from lark_oapi.event.dispatcher_handler import EventDispatcherHandler
 from lark_oapi.ws import Client as WsClient
 from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
+from tiny_claw import config
 from tiny_claw.engine import AgentEngine, Reporter
 from tiny_claw.engine.session import Session, global_session_mgr
 from tiny_claw.schema import Message, Role
@@ -76,10 +76,13 @@ class FeishuBot:
     """飞书机器人 — 长连接模式 + 引擎工厂"""
 
     def __init__(self, factory: EngineFactory, work_dir: str):
-        app_id = os.getenv("FEISHU_APP_ID", "")
-        app_secret = os.getenv("FEISHU_APP_SECRET", "")
+        app_id = config.feishu_app_id()
+        app_secret = config.feishu_app_secret()
         if not app_id or not app_secret:
-            raise ValueError("请设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
+            raise ValueError(
+                "未找到飞书凭据：请在项目根 .env 中设置 "
+                "FEISHU_APP_ID 和 FEISHU_APP_SECRET"
+            )
         self._app_id = app_id
         self._app_secret = app_secret
         self._client = Client.builder().app_id(app_id).app_secret(app_secret).build()

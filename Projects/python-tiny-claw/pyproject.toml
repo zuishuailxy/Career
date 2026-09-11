@@ -17,6 +17,13 @@ dependencies = [
     "lark-oapi>=1.4",
     "fastapi>=0.115",
     "uvicorn>=0.34",
+    "anthropic>=0.40",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
 ]
 
 [tool.uv]
@@ -31,3 +38,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# 固定临时目录：系统默认位置曾残留其他用户身份创建的 pytest-of-* 目录，
+# 导致 tmp_path 创建时报 PermissionError: EEXIST（一次挂掉 19 个用例）。
+# 固定到干净路径避免复发，详见 docs 与 .workbuddy/memory。
+addopts = "--basetemp=/tmp/tiny-claw-pytest"

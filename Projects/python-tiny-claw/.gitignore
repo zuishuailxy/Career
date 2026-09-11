@@ -1,3 +1,17 @@
 *.egg-info/
-*.claw/traces
-*.claw/sandbox
+# ⚠️ 必须用 **/ 前缀：gitignore 的单个 * 不跨路径分隔符，
+# 旧写法 "*.claw/traces" 只能匹配根目录的 .claw，匹配不到 workspace/.claw
+**/.claw/traces/
+**/.claw/sandbox/
+**/.claw/offload/
+
+# ⚠️ 密钥文件：.env 绝不入库，只提交 .env.example 作为模板。
+# 注意顺序：先忽略全部 .env*，再用 ! 把模板放行。
+.env
+.env.*
+!.env.example
+
+# 虚拟环境与测试缓存
+.venv/
+__pycache__/
+.pytest_cache/

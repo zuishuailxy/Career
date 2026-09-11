@@ -12,14 +12,13 @@ import os
 import sys
 import time
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
+# 配置由 tiny_claw.config 统一加载（项目根 .env），此处不再单独 load_dotenv，
+# 避免两处加载路径不一致（旧的 load_dotenv() 按 cwd 搜索，切换目录运行时会失效）。
+from tiny_claw import config
 from tiny_claw.engine import AgentEngine
 from tiny_claw.engine.session import Session, global_session_mgr
 from tiny_claw.engine.terminal_reporter import TerminalReporter
-from tiny_claw.provider import DeepSeekProvider
+from tiny_claw.provider import create_provider
 from tiny_claw.schema import Message, Role
 from tiny_claw.tools import RegistryImpl
 from tiny_claw.tools.subagent import SubagentTool
@@ -42,10 +41,14 @@ logger = logging.getLogger("tiny-claw")
 
 
 def build_engine(
-    work_dir: str, *, plan_mode: bool = False, enable_thinking: bool = True
+    work_dir: str,
+    *,
+    plan_mode: bool = False,
+    enable_thinking: bool = True,
+    provider: str = "openai",
 ) -> AgentEngine:
     """组装引擎：挂载全部工具 + 子智能体 + 费用追踪"""
-    raw_llm = DeepSeekProvider()
+    raw_llm = create_provider(provider)
     llm = CostTracker(raw_llm, model=raw_llm.model)
 
     main_registry = RegistryImpl()
@@ -90,18 +93,22 @@ async def run_cli(
     *,
     plan_mode: bool = False,
     enable_thinking: bool = True,
+    provider: str = "openai",
 ) -> None:
     """CLI 模式：按给定 prompt 驱动 Agent"""
     print("=" * 50)
     print("🚀 启动 tiny-claw CLI 引擎...")
     print(f"📁 锁定工作区: {work_dir}")
     print(
-        f"🧠 慢思考: {'开启' if enable_thinking else '关闭'} | 📋 计划模式: {'开启' if plan_mode else '关闭'}"
+        f"🧠 慢思考: {'开启' if enable_thinking else '关闭'} | 📋 计划模式: {'开启' if plan_mode else '关闭'} | 🔌 协议: {provider}"
     )
     print("=" * 50)
 
     engine = build_engine(
-        work_dir, plan_mode=plan_mode, enable_thinking=enable_thinking
+        work_dir,
+        plan_mode=plan_mode,
+        enable_thinking=enable_thinking,
+        provider=provider,
     )
 
     # 获取持久化 Session + 绑定 CostTracker
@@ -147,7 +154,7 @@ async def run_cli(
 # ═══════════════════════════════════════════════════════════════
 
 
-def run_feishu(work_dir: str) -> None:
+def run_feishu(work_dir: str, provider: str = "openai") -> None:
     """飞书模式（AgentOps）：启动 FeishuBot + 审批中间件 + 生产级配置"""
     from tiny_claw.feishu import FeishuBot, create_approval_middleware
 
@@ -162,6 +169,7 @@ def run_feishu(work_dir: str) -> None:
             work_dir,
             plan_mode=False,
             enable_thinking=False,
+            provider=provider,
         )
         if isinstance(engine.provider, CostTracker):
             engine.provider.bind_session(session)
@@ -220,25 +228,42 @@ def main():
         default=False,
         help="关闭慢思考（Phase 1 Thinking），减少 Token 消耗",
     )
+    parser.add_argument(
+        "--provider",
+        choices=["openai", "anthropic"],
+        default="openai",
+        help=(
+            "协议实现：openai（OpenAI Chat Completion 协议）或 "
+            "anthropic（Anthropic Messages 协议）。两者可指向同一模型，用于验证抽象层"
+        ),
+    )
     args = parser.parse_args()
 
     # 环境变量检查
     if args.mode == "feishu":
-        if not os.getenv("FEISHU_APP_ID") or not os.getenv("FEISHU_APP_SECRET"):
-            logger.fatal("飞书模式需要设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
+        if not (config.feishu_app_id() and config.feishu_app_secret()):
+            logger.fatal(
+                "飞书模式需要凭据：请在项目根 .env 中设置 "
+                "FEISHU_APP_ID 和 FEISHU_APP_SECRET（参考 .env.example）"
+            )
             sys.exit(1)
     else:
         if not args.prompt:
             parser.error("CLI 模式必须指定 -p/--prompt")
 
-    if not os.getenv("DEEPSEEK_API_KEY"):
-        logger.fatal("请先设置 DEEPSEEK_API_KEY 环境变量")
+    # 两套协议共用一个 key 体系：OpenAI 协议要 DEEPSEEK_API_KEY，
+    # Anthropic 协议可用 ANTHROPIC_API_KEY 或复用 DEEPSEEK_API_KEY
+    if not config.has_llm_credentials():
+        logger.fatal(
+            "未找到模型凭据：请在项目根 .env 中设置 DEEPSEEK_API_KEY"
+            "（或 ANTHROPIC_API_KEY），参考 .env.example"
+        )
         sys.exit(1)
 
     work_dir = os.path.abspath(args.dir)
 
     if args.mode == "feishu":
-        run_feishu(work_dir)
+        run_feishu(work_dir, provider=args.provider)
     else:
         asyncio.run(
             run_cli(
@@ -247,6 +272,7 @@ def main():
                 work_dir,
                 plan_mode=args.plan_mode,
                 enable_thinking=not args.no_thinking,
+                provider=args.provider,
             )
         )
 

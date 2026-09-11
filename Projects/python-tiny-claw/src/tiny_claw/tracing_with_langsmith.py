@@ -6,15 +6,18 @@
 import os
 from functools import wraps
 
-from dotenv import load_dotenv
 from langsmith import traceable
 
-load_dotenv()
+from tiny_claw import config
 
 # ---- LangSmith 初始化 ----
-os.environ.setdefault("LANGSMITH_TRACING", "true")
-os.environ.setdefault("LANGSMITH_PROJECT", "tiny-claw")
-os.environ.setdefault("LANGSMITH_API_KEY", os.getenv("LANGSMITH_API_KEY", ""))
+# LangSmith 自身只认环境变量，所以这里把配置层的值回写进 os.environ。
+# 注意用 setdefault：不覆盖调用方显式 export 的值。
+os.environ.setdefault(
+    "LANGSMITH_TRACING", "true" if config.LANGSMITH_TRACING else "false"
+)
+os.environ.setdefault("LANGSMITH_PROJECT", config.LANGSMITH_PROJECT)
+os.environ.setdefault("LANGSMITH_API_KEY", config.langsmith_api_key())
 
 
 def trace(name: str | None = None, **kwargs):
@@ -28,7 +31,7 @@ def trace(name: str | None = None, **kwargs):
     """
     return traceable(
         name=name,
-        project_name=os.getenv("LANGSMITH_PROJECT", "tiny-claw"),
+        project_name=config.LANGSMITH_PROJECT,
         **kwargs,
     )
 
@@ -38,7 +41,7 @@ def trace_llm(func):
     return traceable(
         run_type="llm",
         name="llm-generate",
-        project_name=os.getenv("LANGSMITH_PROJECT", "tiny-claw"),
+        project_name=config.LANGSMITH_PROJECT,
     )(func)
 
 
@@ -47,5 +50,5 @@ def trace_tool(func):
     return traceable(
         run_type="tool",
         name="tool-execute",
-        project_name=os.getenv("LANGSMITH_PROJECT", "tiny-claw"),
+        project_name=config.LANGSMITH_PROJECT,
     )(func)
