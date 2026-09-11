@@ -42,6 +42,8 @@ def _to_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:
 
         elif msg.role == Role.ASSISTANT:
             entry: dict[str, Any] = {"role": "assistant"}
+            if msg.reasoning:
+                entry["reasoning_content"] = msg.reasoning
             if msg.content:
                 entry["content"] = msg.content
             if msg.tool_calls:
