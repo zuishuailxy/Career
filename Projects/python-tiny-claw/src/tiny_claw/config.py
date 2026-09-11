@@ -194,6 +194,22 @@ REMINDER_CONTEXT_PRESSURE = get_float("TINY_CLAW_REMINDER_CONTEXT_PRESSURE", 0.8
 # 剩余轮数少于该值时提醒收敛
 REMINDER_TURN_WARN_REMAINING = get_int("TINY_CLAW_REMINDER_TURN_WARN_REMAINING", 5)
 
+# ── MCP 客户端（见 docs/MCP_INTEGRATION_PLAN.md）──
+# 依赖装在 optional extra 里：pip install -e ".[mcp]"
+MCP_ENABLED = get_bool("TINY_CLAW_MCP_ENABLED", True)
+# 社区 mcpServers 格式的配置文件，默认落项目根。真实文件不入库（含机器路径），
+# 仓库里只有 mcp.json.example
+MCP_CONFIG_PATH = get_str("TINY_CLAW_MCP_CONFIG", "mcp.json")
+# 连接 + initialize 的超时。给得宽是因为 stdio server 常用 npx 拉起：
+# 首次要下载包（实测冷启动 48.8s / 热启动 4.7s）
+MCP_CONNECT_TIMEOUT = get_int("TINY_CLAW_MCP_CONNECT_TIMEOUT", 60)
+# 单次工具调用超时（交给 SDK 的 read_timeout_seconds）
+MCP_CALL_TIMEOUT = get_int("TINY_CLAW_MCP_CALL_TIMEOUT", 60)
+# 额外注入子进程 PATH 的目录（冒号分隔）。
+# 为什么需要：node/npx 常装在非默认位置（如托管环境的 binaries 目录），
+# 不补 PATH 会直接 connect 失败，而报错信息只有 "No such file or directory"
+MCP_EXTRA_PATH = get_str("TINY_CLAW_MCP_EXTRA_PATH", "")
+
 # 子智能体只有 2 个工具（read + bash），并发度默认低于主引擎
 SUBAGENT_PARALLEL_TOOLS = get_int("TINY_CLAW_SUBAGENT_PARALLEL_TOOLS", 3)
 

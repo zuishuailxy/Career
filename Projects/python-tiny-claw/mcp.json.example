@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/ABSOLUTE/PATH/TO/workspace"
+      ],
+      "enabled": true,
+      "approval": "always",
+      "timeout": 120
+    }
+  }
+}
